@@ -1,0 +1,37 @@
+:root {
+    color-scheme: light dark;
+
+    /* Scene backdrops  */
+    --red: #C0392B;
+    --green: #187774;
+    --ink: #fff;
+
+    /* Inside the phone */
+    --accent: #187774;
+    --accent-container: #CDEBE8;
+    --screen-bg: #fff;
+    --screen-ink: #1a1a19;
+
+    --phone-w: 280px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --red: #8E2A22;
+        --green: #0E5B58;
+        --accent: #5CC2BA;
+        --accent-container: #0E5B58;
+        --screen-bg: #121212;
+        --screen-ink: #e6e6e3;
+    }
+}
+
+html, body {
+    margin: 0;
+}
+
+body {
+    font-family: system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--red);
+}

@@ -1,37 +1,51 @@
 :root {
-    color-scheme: light dark;
+  --font: 'Manrope', system-ui, -apple-system, sans-serif;
 
-    /* Scene backdrops  */
-    --red: #C0392B;
-    --green: #187774;
-    --ink: #fff;
+  /* Palette tokens. Initial values deliberately match the JS timeline's
+     start state so first paint never flashes the wrong colour. */
+  --c1: #FF6B4A;
+  --c2: #FFB199;
+  --c3: #8E2A22;
+  --glow: #FFD9C4;
+  --glow-x: 26%;
+  --glow-y: 50%;
+  --glow-alpha: 0.45;
 
-    /* Inside the phone */
-    --accent: #187774;
-    --accent-container: #CDEBE8;
-    --screen-bg: #fff;
-    --screen-ink: #1a1a19;
+  --accent: #FFEDE6;
+  --accent-soft: #FFD9CC;
+  --accent-ink: #7A2418;
+  --screen-bg: #FFF9F6;
+  --screen-ink: #241713;
 
-    --phone-w: 280px;
+  --ink: #ffffff;
+  --muted: rgba(255, 255, 255, 0.7);
+
+  --phone-w: 280px;
+  --phone-d: 20px;
+  --phone-radius: 42px;
+
+  --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --red: #8E2A22;
-        --green: #0E5B58;
-        --accent: #5CC2BA;
-        --accent-container: #0E5B58;
-        --screen-bg: #121212;
-        --screen-ink: #e6e6e3;
-    }
-}
+* { box-sizing: border-box; }
 
-html, body {
-    margin: 0;
-}
+html { scroll-behavior: smooth; }
+
+html, body { margin: 0; }
 
 body {
-    font-family: system-ui, sans-serif;
-    color: var(--ink);
-    background: var(--red);
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--c3);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+@media (max-width: 767px) {
+  :root {
+    --phone-w: 226px;
+    --phone-d: 16px;
+    --phone-radius: 34px;
+  }
 }

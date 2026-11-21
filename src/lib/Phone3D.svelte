@@ -1,7 +1,7 @@
-
 <script>
   import { onMount } from 'svelte';
   import * as THREE from 'three';
+
   import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
   import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
@@ -17,40 +17,364 @@
 
   const CAMERA_Z = 6.2;
   const DEG = Math.PI / 180;
+
   const MODEL_URL = '/models/Samsung_s24_ultra.gltf';
   const SCREEN_MESH_NAME = 'GeometryNode_59';
 
-  // Small offset above the original glass.
   const SCREEN_LIFT_LOCAL = 0.008;
+
+  const TEAM = [
+    {
+      name: 'Marlon Isaguirre',
+      role: 'Project Lead',
+      initials: 'MI',
+      avatar: 'https://avatars.githubusercontent.com/u/220807597?v=4',
+      bg: '#d5f1e9',
+      ink: '#145d52'
+    },
+    {
+      name: 'Julian Macato',
+      role: 'Full-Stack Developer',
+      initials: 'JM',
+      avatar: 'https://avatars.githubusercontent.com/u/53817791?v=4',
+      bg: '#f8e5d1',
+      ink: '#765132'
+    },
+    {
+      name: 'Ravin Aguelo',
+      role: 'Runtime Engineer',
+      initials: 'RA',
+      avatar: 'https://avatars.githubusercontent.com/u/220807681?v=4',
+      bg: '#e0eafa',
+      ink: '#445f83'
+    },
+    {
+      name: 'Jill Abarte',
+      role: 'Backend Developer',
+      initials: 'JA',
+      avatar: 'https://avatars.githubusercontent.com/u/176262249?v=4',
+      bg: '#eee0f1',
+      ink: '#74507e'
+    }
+  ];
 
   let renderer;
   let scene;
   let camera;
   let group;
+
   let environment;
   let pmrem;
+
   let resizeObserver;
+
   let screenGeometry;
   let screenA;
   let screenB;
+
   let materialA;
   let materialB;
+
   let textures = [];
 
   let ready = false;
   let disposed = false;
   let failed = false;
   let readyNotified = false;
+
   let textureLoadId = 0;
 
   let lastPose = null;
+
   let lastIndex = -1;
   let lastMix = -1;
+
   let loadedScreens = null;
   let latestScreens = screens;
 
   let modelHeight = 4.3;
-  let size = { width: 1, height: 1 };
+
+  let size = {
+    width: 1,
+    height: 1
+  };
+
+  /*
+    GitHub avatar loading.
+
+    The requests use CORS so the images can be drawn
+    into a canvas and uploaded as a WebGL texture.
+
+    If an image fails, the profile's initials are used.
+  */
+
+  function loadAvatar(url) {
+    return new Promise((resolve) => {
+      const image = new Image();
+
+      image.crossOrigin = 'anonymous';
+
+      let settled = false;
+
+      const finish = (result) => {
+        if (settled) return;
+
+        settled = true;
+
+        clearTimeout(timeout);
+
+        resolve(result);
+      };
+
+      const timeout = setTimeout(() => {
+        finish(null);
+      }, 5000);
+
+      image.onload = () => {
+        finish(image);
+      };
+
+      image.onerror = () => {
+        finish(null);
+      };
+
+      image.src = url;
+    });
+  }
+
+  /*
+    Create the team's landscape screen as a canvas texture.
+
+    The canvas is physically portrait-shaped because that is
+    how the Samsung screen mesh is mapped.
+
+    Its contents are rotated 90 degrees to remain upright
+    when the phone itself rotates into landscape orientation.
+  */
+
+  async function createTeamTexture() {
+    const avatars = await Promise.all(
+      TEAM.map((member) => loadAvatar(member.avatar))
+    );
+
+    if (disposed) return null;
+
+    const canvas = document.createElement('canvas');
+
+    canvas.width = 1080;
+    canvas.height = 2340;
+
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      throw new Error('Could not create the team profile canvas.');
+    }
+
+    ctx.save();
+
+    /*
+      Landscape coordinate system:
+
+      2340 × 1080 logical pixels,
+      rotated into a 1080 × 2340 portrait canvas.
+    */
+
+    ctx.translate(1080, 0);
+    ctx.rotate(Math.PI / 2);
+
+    ctx.fillStyle = '#f5faf8';
+    ctx.fillRect(0, 0, 2340, 1080);
+
+    const cardWidth = 500;
+    const cardHeight = 910;
+
+    const firstX = 110;
+    const cardGap = 540;
+
+    const cardY = 85;
+
+    TEAM.forEach((member, index) => {
+      const x = firstX + index * cardGap;
+
+      /*
+        Card surface.
+      */
+
+      ctx.save();
+
+      ctx.shadowColor = 'rgba(27, 58, 49, 0.045)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetY = 5;
+
+      ctx.beginPath();
+
+      ctx.roundRect(
+        x,
+        cardY,
+        cardWidth,
+        cardHeight,
+        42
+      );
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      ctx.restore();
+
+      ctx.beginPath();
+
+      ctx.roundRect(
+        x,
+        cardY,
+        cardWidth,
+        cardHeight,
+        42
+      );
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#dce9e3';
+      ctx.stroke();
+
+      /*
+        Profile portrait.
+
+        Each avatar is cropped to a centered square,
+        then clipped into a circle.
+      */
+
+      const centerX = x + cardWidth / 2;
+      const centerY = cardY + 315;
+
+      const avatarSize = 270;
+      const radius = avatarSize / 2;
+
+      const avatarX = centerX - radius;
+      const avatarY = centerY - radius;
+
+      const avatar = avatars[index];
+
+      ctx.save();
+
+      ctx.beginPath();
+
+      ctx.arc(
+        centerX,
+        centerY,
+        radius,
+        0,
+        Math.PI * 2
+      );
+
+      ctx.clip();
+
+      ctx.fillStyle = member.bg;
+
+      ctx.fillRect(
+        avatarX,
+        avatarY,
+        avatarSize,
+        avatarSize
+      );
+
+      if (avatar) {
+        const width = avatar.naturalWidth || avatar.width;
+        const height = avatar.naturalHeight || avatar.height;
+
+        const cropSize = Math.min(width, height);
+
+        const cropX = (width - cropSize) / 2;
+        const cropY = (height - cropSize) / 2;
+
+        ctx.drawImage(
+          avatar,
+
+          cropX,
+          cropY,
+          cropSize,
+          cropSize,
+
+          avatarX,
+          avatarY,
+          avatarSize,
+          avatarSize
+        );
+      } else {
+        /*
+          Initials fallback if GitHub is unavailable.
+        */
+
+        ctx.fillStyle = member.ink;
+
+        ctx.font = '600 82px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        ctx.fillText(
+          member.initials,
+          centerX,
+          centerY
+        );
+      }
+
+      ctx.restore();
+
+      /*
+        Name.
+      */
+
+      ctx.fillStyle = '#192923';
+
+      ctx.font = '700 38px Arial, sans-serif';
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      ctx.fillText(
+        member.name,
+        centerX,
+        cardY + 660,
+        cardWidth - 42
+      );
+
+      /*
+        Role.
+      */
+
+      ctx.fillStyle = '#62766e';
+
+      ctx.font = '500 27px Arial, sans-serif';
+
+      ctx.fillText(
+        member.role,
+        centerX,
+        cardY + 735,
+        cardWidth - 42
+      );
+    });
+
+    ctx.restore();
+
+    /*
+      Convert the completed canvas into a Three.js texture.
+    */
+
+    const texture = new THREE.CanvasTexture(canvas);
+
+    texture.colorSpace = THREE.SRGBColorSpace;
+
+    texture.anisotropy = Math.min(
+      8,
+      renderer.capabilities.getMaxAnisotropy()
+    );
+
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+
+    texture.generateMipmaps = true;
+    texture.needsUpdate = true;
+
+    return texture;
+  }
 
   function fail(error) {
     if (disposed || failed) return;
@@ -58,10 +382,16 @@
     failed = true;
 
     if (error) {
-      console.error('Samsung phone setup failed:', error);
+      console.error(
+        'Samsung phone setup failed:',
+        error
+      );
     }
 
-    if (host) host.style.opacity = '0';
+    if (host) {
+      host.style.opacity = '0';
+    }
+
     onfail();
   }
 
@@ -89,15 +419,32 @@
     }
 
     readyNotified = true;
+
     render();
+
     host.style.opacity = '1';
+
     onready();
   }
 
-  function updateScreen(value) {
-    if (!materialA || !materialB || !textures.length) return;
+  /*
+    Update the active screen texture and transition
+    between consecutive screens.
+  */
 
-    const maxIndex = Math.max(0, textures.length - 1);
+  function updateScreen(value) {
+    if (
+      !materialA ||
+      !materialB ||
+      !textures.length
+    ) {
+      return;
+    }
+
+    const maxIndex = Math.max(
+      0,
+      textures.length - 1
+    );
 
     const index = THREE.MathUtils.clamp(
       Math.floor(value),
@@ -128,17 +475,32 @@
       textures[index] ||
       null;
 
-    materialA.opacity = index === maxIndex ? 1 : 1 - mix;
-    materialB.opacity = index === maxIndex ? 0 : mix;
+    materialA.opacity =
+      index === maxIndex ? 1 : 1 - mix;
+
+    materialB.opacity =
+      index === maxIndex ? 0 : mix;
 
     materialA.needsUpdate = true;
     materialB.needsUpdate = true;
   }
 
+  /*
+    Apply the GSAP pose to the 3D phone.
+  */
+
   function applyPose(pose) {
-    if (!ready || !group || !renderer || !camera) return;
+    if (
+      !ready ||
+      !group ||
+      !renderer ||
+      !camera
+    ) {
+      return;
+    }
 
     const { width, height } = size;
+
     if (!width || !height) return;
 
     const fov = THREE.MathUtils.clamp(
@@ -159,6 +521,7 @@
     ) {
       camera.fov = fov;
       camera.aspect = width / height;
+
       camera.updateProjectionMatrix();
     }
 
@@ -172,17 +535,24 @@
       (phoneHeight / height) * visibleHeight;
 
     group.scale.setScalar(
-      (targetWorldHeight / modelHeight) * pose.scale
+      (targetWorldHeight / modelHeight) *
+      pose.scale
     );
 
     group.position.set(
       pose.xVw * visibleWidth,
-      -(baseTop - 0.5 + pose.yVh) * visibleHeight,
+
+      -(baseTop - 0.5 + pose.yVh) *
+        visibleHeight,
+
       (pose.z || 0) / 100
     );
 
-    // The original screen faces -Z.
-    // Rotating the phone 180 degrees presents it to the camera.
+    /*
+      The original screen faces -Z.
+      Rotating the model 180 degrees presents it to the camera.
+    */
+
     group.rotation.set(
       -pose.pitch * DEG,
       Math.PI + pose.yaw * DEG,
@@ -190,13 +560,20 @@
     );
 
     updateScreen(pose.screenF || 0);
+
     render();
   }
 
   export function setPose(pose) {
     lastPose = pose;
+
     applyPose(pose);
   }
+
+  /*
+    Reconstruct the Samsung display plane using
+    the original display mesh's geometry.
+  */
 
   function createScreenGeometry(source) {
     const positions = source.geometry?.attributes?.position;
@@ -207,9 +584,11 @@
       );
     }
 
-    // Use the actual display mesh's local coordinates.
     const corners = [0, 1, 2, 3].map((index) =>
-      new THREE.Vector3().fromBufferAttribute(positions, index)
+      new THREE.Vector3().fromBufferAttribute(
+        positions,
+        index
+      )
     );
 
     const edgeA = corners[1].clone().sub(corners[0]);
@@ -226,9 +605,11 @@
       );
     }
 
-    // Keep the texture slightly above the glass.
     corners.forEach((corner) =>
-      corner.addScaledVector(normal, SCREEN_LIFT_LOCAL)
+      corner.addScaledVector(
+        normal,
+        SCREEN_LIFT_LOCAL
+      )
     );
 
     const geometry = new THREE.BufferGeometry();
@@ -245,9 +626,12 @@
       )
     );
 
-    // Horizontal UV reversal compensates for the 180-degree
-    // Y rotation used to face the device toward the camera.
-    // This makes the application text read normally.
+    /*
+      Horizontal UV reversal compensates for the
+      180-degree Y rotation used to face the device
+      toward the camera.
+    */
+
     geometry.setAttribute(
       'uv',
       new THREE.Float32BufferAttribute(
@@ -272,8 +656,16 @@
     return geometry;
   }
 
+  /*
+    Attach two transparent layers over the original
+    Samsung screen. This allows the screen transition
+    to crossfade without replacing the actual glass.
+  */
+
   function addScreenOverlay(model) {
-    const source = model.getObjectByName(SCREEN_MESH_NAME);
+    const source = model.getObjectByName(
+      SCREEN_MESH_NAME
+    );
 
     if (!source?.isMesh) {
       throw new Error(
@@ -285,16 +677,17 @@
 
     materialA = new THREE.MeshBasicMaterial({
       color: 0xffffff,
+
       transparent: true,
       opacity: 1,
 
-      // Important: retain depth testing so the app
-      // cannot appear through the back of the phone.
       depthTest: true,
       depthWrite: false,
 
       toneMapped: false,
+
       side: THREE.DoubleSide,
+
       polygonOffset: true,
       polygonOffsetFactor: -3,
       polygonOffsetUnits: -3
@@ -302,21 +695,27 @@
 
     materialB = new THREE.MeshBasicMaterial({
       color: 0xffffff,
+
       transparent: true,
       opacity: 0,
 
-      // Apply the same depth behavior to the next screen.
       depthTest: true,
       depthWrite: false,
 
       toneMapped: false,
+
       side: THREE.DoubleSide,
+
       polygonOffset: true,
       polygonOffsetFactor: -4,
       polygonOffsetUnits: -4
     });
 
-    screenA = new THREE.Mesh(screenGeometry, materialA);
+    screenA = new THREE.Mesh(
+      screenGeometry,
+      materialA
+    );
+
     screenA.name = 'patnub-app-screen-current';
     screenA.renderOrder = 10000;
     screenA.frustumCulled = false;
@@ -330,34 +729,59 @@
     screenB.renderOrder = 10001;
     screenB.frustumCulled = false;
 
-    // Both display layers inherit the actual Samsung glass transform.
     source.add(screenA, screenB);
 
-    // Preserve the original black glass and bezel.
     source.renderOrder = 0;
   }
 
+  /*
+    Load all four app screens and the generated team screen.
+
+    The final "team-profiles" entry is generated locally;
+    it is not a URL.
+  */
+
   async function loadTextures(urls) {
-    if (!renderer || disposed || !urls?.length) return false;
+    if (!renderer || disposed || !urls?.length) {
+      return false;
+    }
 
     const requestId = ++textureLoadId;
+
     loadedScreens = urls;
 
     const loader = new THREE.TextureLoader();
 
     try {
       const loaded = await Promise.all(
-        urls.map((url) => loader.loadAsync(url))
+        urls.map((url) => {
+          if (url === 'team-profiles') {
+            return createTeamTexture();
+          }
+
+          return loader.loadAsync(url);
+        })
       );
 
       if (disposed || requestId !== textureLoadId) {
-        loaded.forEach((texture) => texture?.dispose());
+        loaded.forEach((texture) =>
+          texture?.dispose()
+        );
+
         return false;
       }
 
-      textures.forEach((texture) => texture?.dispose());
+      textures.forEach((texture) =>
+        texture?.dispose()
+      );
 
       textures = loaded.map((texture) => {
+        if (!texture) {
+          throw new Error(
+            'The team profile texture could not be created.'
+          );
+        }
+
         texture.colorSpace = THREE.SRGBColorSpace;
 
         texture.anisotropy = Math.min(
@@ -367,6 +791,7 @@
 
         texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.magFilter = THREE.LinearFilter;
+
         texture.generateMipmaps = true;
         texture.needsUpdate = true;
 
@@ -376,8 +801,11 @@
       console.info(
         '[patnub.ai] App screen textures loaded:',
         textures.map((texture) => ({
-          width: texture.image?.naturalWidth || texture.image?.width,
-          height: texture.image?.naturalHeight || texture.image?.height
+          width: texture.image?.naturalWidth ||
+            texture.image?.width,
+
+          height: texture.image?.naturalHeight ||
+            texture.image?.height
         }))
       );
 
@@ -392,6 +820,7 @@
       }
 
       notifyReady();
+
       return true;
 
     } catch (error) {
@@ -402,6 +831,10 @@
       return false;
     }
   }
+
+  /*
+    React to screen-array changes.
+  */
 
   $effect(() => {
     latestScreens = screens;
@@ -415,6 +848,10 @@
     }
   });
 
+  /*
+    Initialize Three.js and load the Samsung model.
+  */
+
   onMount(() => {
     try {
       const probe = document
@@ -422,7 +859,12 @@
         .getContext('webgl2');
 
       if (!probe) {
-        fail(new Error('WebGL 2 is not available in this browser.'));
+        fail(
+          new Error(
+            'WebGL 2 is not available in this browser.'
+          )
+        );
+
         return;
       }
 
@@ -437,7 +879,9 @@
       );
 
       renderer.setClearColor(0x000000, 0);
+
       renderer.outputColorSpace = THREE.SRGBColorSpace;
+
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.08;
 
@@ -459,7 +903,11 @@
 
       const room = new RoomEnvironment();
 
-      environment = pmrem.fromScene(room, 0.04).texture;
+      environment = pmrem.fromScene(
+        room,
+        0.04
+      ).texture;
+
       scene.environment = environment;
 
       room.dispose();
@@ -493,6 +941,7 @@
       );
 
       group = new THREE.Group();
+
       scene.add(group);
 
       const loader = new GLTFLoader();
@@ -508,16 +957,24 @@
 
             model.updateMatrixWorld(true);
 
-            const bounds = new THREE.Box3().setFromObject(model);
+            const bounds = new THREE.Box3().setFromObject(
+              model
+            );
 
-            const center = bounds.getCenter(new THREE.Vector3());
-            const dimensions = bounds.getSize(new THREE.Vector3());
+            const center = bounds.getCenter(
+              new THREE.Vector3()
+            );
+
+            const dimensions = bounds.getSize(
+              new THREE.Vector3()
+            );
 
             modelHeight = dimensions.y || 4.3;
 
             addScreenOverlay(model);
 
             model.position.sub(center);
+
             model.updateMatrixWorld(true);
 
             group.add(model);
@@ -527,7 +984,11 @@
             if (latestScreens?.length) {
               loadTextures(latestScreens);
             } else {
-              fail(new Error('No application screen textures were provided.'));
+              fail(
+                new Error(
+                  'No application screen textures were provided.'
+                )
+              );
             }
 
             if (lastPose) {
@@ -544,24 +1005,34 @@
         (error) => fail(error)
       );
 
-      resizeObserver = new ResizeObserver(([entry]) => {
-        if (!entry || disposed) return;
+      /*
+        Resize handling.
+      */
 
-        const { width, height } = entry.contentRect;
+      resizeObserver = new ResizeObserver(
+        ([entry]) => {
+          if (!entry || disposed) return;
 
-        size = {
-          width: Math.max(1, width),
-          height: Math.max(1, height)
-        };
+          const { width, height } = entry.contentRect;
 
-        renderer.setSize(size.width, size.height, false);
+          size = {
+            width: Math.max(1, width),
+            height: Math.max(1, height)
+          };
 
-        if (lastPose) {
-          applyPose(lastPose);
-        } else {
-          render();
+          renderer.setSize(
+            size.width,
+            size.height,
+            false
+          );
+
+          if (lastPose) {
+            applyPose(lastPose);
+          } else {
+            render();
+          }
         }
-      });
+      );
 
       resizeObserver.observe(host);
 
@@ -570,20 +1041,31 @@
         height: host.clientHeight || 1
       };
 
-      renderer.setSize(size.width, size.height, false);
+      renderer.setSize(
+        size.width,
+        size.height,
+        false
+      );
 
     } catch (error) {
       fail(error);
     }
 
+    /*
+      Cleanup.
+    */
+
     return () => {
       disposed = true;
       ready = false;
+
       textureLoadId += 1;
 
       resizeObserver?.disconnect();
 
-      textures.forEach((texture) => texture?.dispose());
+      textures.forEach((texture) =>
+        texture?.dispose()
+      );
 
       screenGeometry?.dispose();
       screenB?.geometry?.dispose();
@@ -602,35 +1084,49 @@
         ) {
           object.geometry?.dispose();
 
-          const materials = Array.isArray(object.material)
+          const materials = Array.isArray(
+            object.material
+          )
             ? object.material
             : [object.material];
 
-          materials.forEach((material) => material?.dispose());
+          materials.forEach((material) =>
+            material?.dispose()
+          );
         }
       });
 
       renderer?.dispose();
       renderer?.forceContextLoss();
+
       renderer?.domElement?.remove();
     };
   });
 </script>
 
-<div class="canvas-host" bind:this={host} aria-hidden="true"></div>
+<div
+  class="canvas-host"
+  bind:this={host}
+  aria-hidden="true"
+></div>
 
 <style>
   .canvas-host {
     position: absolute;
     inset: 0;
+
     z-index: 7;
+
     opacity: 0;
+
     pointer-events: none;
+
     transition: opacity 220ms ease;
   }
 
   .canvas-host :global(canvas) {
     display: block;
+
     width: 100%;
     height: 100%;
   }

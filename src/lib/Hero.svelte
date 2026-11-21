@@ -1,4 +1,3 @@
-
 <script>
   import { onMount } from 'svelte';
   import { gsap } from 'gsap';
@@ -7,12 +6,35 @@
   import DemoScreens from './DemoScreens.svelte';
   import StepRail from './StepRail.svelte';
 
+  /*
+    The story is a row of full-viewport "beats". Scrolling rests on each one:
+
+      0  Problem question   (peach backdrop)
+      1  Hero               (teal backdrop, phone lands on the right)
+      2  Feature 1          (white backdrop, phone spins to the left)
+      3  Feature 2
+      4  Feature 3
+      5  Feature 4
+
+    BEATS is the index of the last beat. Download and About extend it later.
+  */
+  const BEATS = 5;
+  const FIRST_FEATURE_BEAT = 2;
+  const SNAP = true;
+
+  // Timeline position of a beat, plus a fraction of the way to the next one.
+  const T = (beat, fraction = 0) => (beat + fraction) / BEATS;
+  // A duration expressed as a fraction of one beat.
+  const D = (fraction) => fraction / BEATS;
+
   let scene;
   let stage;
+  let bgTeal;
+  let bgWhite;
   let problem;
   let tagline;
-  let featureCopy;
-  let finalCopy;
+  let featureCopy = $state(null);
+  let railWrap = $state(null);
   let scrollHint;
   let phoneSlot;
   let contactShadow;
@@ -25,13 +47,12 @@
   let use3d = $state(true);
   let threeReady = $state(false);
   let Phone3DLazy = $state(null);
-  let layoutDesktop = $state(true);
 
   const getDeviceHeight = () => typeof window === 'undefined'
     ? 420
     : window.innerWidth < 768
       ? Math.min(window.innerHeight * 0.44, 320)
-      : Math.min(window.innerHeight * 0.58, 520);
+      : Math.min(window.innerHeight * 0.76, 700);
 
   let deviceHeight = $state(getDeviceHeight());
 
@@ -50,7 +71,7 @@
       short: 'Assistant'
     },
     {
-      title: "Keep your doctor's note.",
+      title: 'Keep your doctor’s note.',
       body: 'Save clinician-approved instructions on your device, so the details are easier to revisit when you need them.',
       short: 'Records'
     },
@@ -66,80 +87,18 @@
     }
   ];
 
-  const KEYS = [
-    'stage-bg',
-    'stage-ink',
-    'stage-muted',
-    'stage-accent',
-    'stage-soft'
-  ];
-
-  const PALETTE = [
-    {
-      'stage-bg': '#F5FAF8',
-      'stage-ink': '#17231F',
-      'stage-muted': '#52645E',
-      'stage-accent': '#0E8F7E',
-      'stage-soft': '#DFF3ED'
-    },
-    {
-      'stage-bg': '#E5F3EE',
-      'stage-ink': '#17372F',
-      'stage-muted': '#4F6D63',
-      'stage-accent': '#0B796B',
-      'stage-soft': '#C8EADF'
-    },
-    {
-      'stage-bg': '#F5F6F0',
-      'stage-ink': '#24372F',
-      'stage-muted': '#65746B',
-      'stage-accent': '#0E8F7E',
-      'stage-soft': '#E7EBDD'
-    },
-    {
-      'stage-bg': '#0E6257',
-      'stage-ink': '#F5FBF8',
-      'stage-muted': '#D0E7DF',
-      'stage-accent': '#D2F2E8',
-      'stage-soft': '#28796D'
-    }
-  ];
-
-  const interpolatePalette = [0, 1, 2].map((i) =>
-    Object.fromEntries(
-      KEYS.map((key) => [
-        key,
-        gsap.utils.interpolate(PALETTE[i][key], PALETTE[i + 1][key])
-      ])
-    )
-  );
-
   const clamp = gsap.utils.clamp;
 
   function updateDeviceHeight() {
     deviceHeight = getDeviceHeight();
   }
 
-  function applyPalette(value) {
-    const index = clamp(0, 2, Math.floor(value));
-    const fraction = clamp(0, 1, value - index);
-
-    for (const key of KEYS) {
-      document.documentElement.style.setProperty(
-        `--${key}`,
-        interpolatePalette[index][key](fraction)
-      );
-    }
-  }
-
   function goToStep(index) {
     const trigger = ScrollTrigger.getById('patnub-story');
     if (!trigger) return;
 
-    const targets = [0.60, 0.73, 0.87, 0.985];
-
     window.scrollTo({
-      top: trigger.start + (trigger.end - trigger.start) * targets[index],
+      top: trigger.start + (trigger.end - trigger.start) * T(FIRST_FEATURE_BEAT + index),
       behavior: 'smooth'
     });
   }
@@ -148,9 +107,7 @@
     gsap.registerPlugin(ScrollTrigger);
 
     updateDeviceHeight();
-    window.addEventListener('resize', updateDeviceHeight, {
-      passive: true
-    });
+    window.addEventListener('resize', updateDeviceHeight, { passive: true });
 
     import('./Phone3D.svelte')
       .then((module) => {
@@ -161,56 +118,53 @@
       });
 
     const buildStory = (isDesktop) => {
-      layoutDesktop = isDesktop;
       reduced = false;
 
+      // Desktop: lands on the right, then crosses to the left for the features.
+      // Mobile keeps the phone centered until its own pass.
+      const restX = isDesktop ? 0.22 : 0;
+      const featureX = isDesktop ? -0.22 : 0;
+      const restScale = isDesktop ? 1 : 0.88;
+
       const pose = {
-        // Begin beyond the left edge.
+        // Starts beyond the left edge.
         xVw: isDesktop ? -0.66 : -0.72,
         yVh: isDesktop ? 0 : 0.17,
         z: -35,
-
-        // Spin while entering, then face forward.
         yaw: -450,
-
         pitch: isDesktop ? 4 : 3,
-        roll: isDesktop ? -7 : -5,
-        scale: isDesktop ? 0.76 : 0.74,
-
+        roll: -7,
+        scale: isDesktop ? 0.9 : 0.74,
         screenF: 0,
-        palette: 0,
-
-        persp: isDesktop ? 1180 : 1050,
-        originX: 52,
-        originY: 50
+        reveal1: 0,
+        reveal2: 0,
+        persp: 1180
       };
 
       const idle = { y: 0, yaw: 0 };
       const pointer = { x: 0, y: 0 };
       const wobble = { value: 0, target: 0 };
+      const size = { w: 0, h: 0 };
 
       let active = true;
-      let lastPalette = -1;
-      let lastPerspective = '';
+      let lastClipTeal = '';
+      let lastClipWhite = '';
 
-      gsap.set(
-        [problem, tagline, featureCopy, finalCopy].filter(Boolean),
-        { y: 18 }
-      );
+      const measure = () => {
+        size.w = stage.clientWidth;
+        size.h = stage.clientHeight;
+      };
 
+      measure();
+      window.addEventListener('resize', measure, { passive: true });
+
+      gsap.set([tagline, featureCopy, railWrap].filter(Boolean), { autoAlpha: 0 });
+      gsap.set([tagline, featureCopy].filter(Boolean), { y: 24 });
       gsap.set(problem, { autoAlpha: 1, y: 0 });
-
-      gsap.set(
-        [tagline, featureCopy, finalCopy].filter(Boolean),
-        { autoAlpha: 0 }
-      );
-
       if (scrollHint) gsap.set(scrollHint, { autoAlpha: 1 });
 
       screen = 0;
       step = 0;
-
-      applyPalette(0);
 
       const timeline = gsap.timeline({
         defaults: { ease: 'none' },
@@ -222,221 +176,127 @@
           end: 'bottom bottom',
           scrub: 0.72,
           invalidateOnRefresh: true,
+          snap: SNAP
+            ? {
+                snapTo: 1 / BEATS,
+                duration: { min: 0.25, max: 0.7 },
+                delay: 0.1,
+                ease: 'power2.inOut'
+              }
+            : undefined,
 
           onUpdate: (self) => {
-            wobble.target = clamp(
-              -5,
-              5,
-              self.getVelocity() / 420
-            );
+            wobble.target = clamp(-5, 5, self.getVelocity() / 420);
           }
         }
       });
 
-      if (isDesktop) {
-        // Entrance from completely off-canvas left to the right.
-        timeline.to(pose, {
-          xVw: 0.22,
-          yaw: 0,
-          z: 0,
-          scale: 0.96,
-          roll: 0,
-          duration: 0.30,
-          ease: 'power3.out'
-        }, 0);
-
-        timeline.to(pose, {
-          scale: 0.91,
-          duration: 0.07,
-          ease: 'power2.out'
-        }, 0.30);
-
-        timeline.to(problem, {
-          autoAlpha: 0,
-          y: -18,
-          duration: 0.08,
-          ease: 'power2.in'
-        }, 0.08);
-
-        timeline.to(tagline, {
-          autoAlpha: 1,
-          y: 0,
-          duration: 0.1,
-          ease: 'back.out(1.45)'
-        }, 0.34);
-
-        timeline.to(pose, {
-          palette: 1,
-          yaw: 170,
-          pitch: 7,
-          duration: 0.15,
-          ease: 'power2.inOut'
-        }, 0.42);
-
-        timeline.to(tagline, {
-          autoAlpha: 0,
-          y: -14,
-          duration: 0.07
-        }, 0.53);
-
-        timeline.to(featureCopy, {
-          autoAlpha: 1,
-          y: 0,
-          duration: 0.1,
-          ease: 'back.out(1.35)'
-        }, 0.58);
-
-        timeline.to(pose, {
-          yaw: 360,
-          screenF: 1,
-          palette: 1.35,
-          duration: 0.16,
-          ease: 'power2.inOut'
-        }, 0.55);
-
-        timeline.to(pose, {
-          yaw: 540,
-          screenF: 2,
-          palette: 2,
-          duration: 0.17,
-          ease: 'power2.inOut'
-        }, 0.72);
-
-        timeline.to(pose, {
-          yaw: 720,
-          screenF: 3,
-          palette: 2.55,
-          duration: 0.17,
-          ease: 'power2.inOut'
-        }, 0.89);
-
-        timeline.to(featureCopy, {
-          autoAlpha: 0,
-          y: -15,
-          duration: 0.06
-        }, 0.91);
-
-        timeline.to(finalCopy, {
-          autoAlpha: 1,
-          y: 0,
-          duration: 0.09,
-          ease: 'back.out(1.4)'
-        }, 0.93);
-
-        timeline.to(pose, {
-          yaw: 706,
-          scale: 0.9,
-          xVw: 0.22,
-          palette: 3,
-          duration: 0.08,
-          ease: 'power2.out'
-        }, 0.92);
-      } else {
-        // On mobile, settle centrally beneath the copy.
-        timeline.to(pose, {
-          xVw: 0,
-          yaw: 0,
-          z: 0,
-          scale: 0.9,
-          roll: 0,
-          duration: 0.30,
-          ease: 'power3.out'
-        }, 0);
-
-        timeline.to(pose, {
-          scale: 0.85,
-          duration: 0.07,
-          ease: 'power2.out'
-        }, 0.30);
-
-        timeline.to(problem, {
-          autoAlpha: 0,
-          y: -15,
-          duration: 0.07
-        }, 0.08);
-
-        timeline.to(tagline, {
-          autoAlpha: 1,
-          y: 0,
-          duration: 0.1,
-          ease: 'back.out(1.35)'
-        }, 0.34);
-
-        timeline.to(pose, {
-          yaw: 170,
-          palette: 1,
-          duration: 0.15,
-          ease: 'power2.inOut'
-        }, 0.42);
-
-        timeline.to(tagline, {
-          autoAlpha: 0,
-          y: -12,
-          duration: 0.07
-        }, 0.53);
-
-        timeline.to(featureCopy, {
-          autoAlpha: 1,
-          y: 0,
-          duration: 0.1,
-          ease: 'back.out(1.3)'
-        }, 0.58);
-
-        timeline.to(pose, {
-          yaw: 360,
-          screenF: 1,
-          palette: 1.3,
-          duration: 0.16,
-          ease: 'power2.inOut'
-        }, 0.55);
-
-        timeline.to(pose, {
-          yaw: 540,
-          screenF: 2,
-          palette: 2,
-          duration: 0.17,
-          ease: 'power2.inOut'
-        }, 0.72);
-
-        timeline.to(pose, {
-          yaw: 720,
-          screenF: 3,
-          palette: 2.5,
-          duration: 0.17,
-          ease: 'power2.inOut'
-        }, 0.89);
-
-        timeline.to(featureCopy, {
-          autoAlpha: 0,
-          y: -12,
-          duration: 0.06
-        }, 0.91);
-
-        timeline.to(finalCopy, {
-          autoAlpha: 1,
-          y: 0,
-          duration: 0.09,
-          ease: 'back.out(1.3)'
-        }, 0.93);
-
-        timeline.to(pose, {
-          yaw: 706,
-          palette: 3,
-          scale: 0.84,
-          xVw: 0,
-          duration: 0.08,
-          ease: 'power2.out'
-        }, 0.92);
-      }
+      /* Beat 0 -> 1: the phone arrives and carries the teal in with it. */
+      timeline.to(problem, {
+        autoAlpha: 0,
+        y: -28,
+        duration: D(0.3),
+        ease: 'power2.in'
+      }, T(0));
 
       if (scrollHint) {
-        timeline.to(scrollHint, {
-          autoAlpha: 0,
-          duration: 0.04
-        }, 0.06);
+        timeline.to(scrollHint, { autoAlpha: 0, duration: D(0.15) }, T(0));
       }
 
-      timeline.to({}, { duration: 0.001 }, 1);
+      timeline.to(pose, {
+        xVw: restX,
+        yaw: 0,
+        z: 0,
+        roll: 0,
+        scale: restScale,
+        duration: D(0.9),
+        ease: 'power2.out'
+      }, T(0, 0.1));
+
+      timeline.to(pose, {
+        reveal1: 1,
+        duration: D(0.75),
+        ease: 'power2.inOut'
+      }, T(0, 0.2));
+
+      timeline.to(tagline, {
+        autoAlpha: 1,
+        y: 0,
+        duration: D(0.15),
+        ease: 'power2.out'
+      }, T(0, 0.85));
+
+      /* Beat 1 -> 2: spin right to left, white takes over, copy lands on the right. */
+      timeline.to(tagline, {
+        autoAlpha: 0,
+        y: -24,
+        duration: D(0.25),
+        ease: 'power2.in'
+      }, T(1));
+
+      timeline.to(pose, {
+        xVw: featureX,
+        yaw: -360,
+        duration: D(0.9),
+        ease: 'power2.inOut'
+      }, T(1, 0.05));
+
+      timeline.to(pose, {
+        reveal2: 1,
+        duration: D(0.75),
+        ease: 'power2.inOut'
+      }, T(1, 0.15));
+
+      timeline.to([featureCopy, railWrap].filter(Boolean), {
+        autoAlpha: 1,
+        y: 0,
+        duration: D(0.15),
+        ease: 'power2.out'
+      }, T(1, 0.85));
+
+      /* Beats 2 -> 5: no spin. The screen changes and the copy swaps mid-way. */
+      for (let i = 1; i < features.length; i += 1) {
+        const beat = FIRST_FEATURE_BEAT + i - 1;
+
+        // Linear, so the screen index rounds over at exactly half-way (0.5).
+        timeline.to(pose, {
+          screenF: i,
+          duration: D(0.7),
+          ease: 'none'
+        }, T(beat, 0.15));
+
+        timeline.to(featureCopy, {
+          autoAlpha: 0,
+          y: -14,
+          duration: D(0.2),
+          ease: 'power2.in'
+        }, T(beat, 0.25));
+
+        timeline.set(featureCopy, { y: 18 }, T(beat, 0.5));
+
+        timeline.to(featureCopy, {
+          autoAlpha: 1,
+          y: 0,
+          duration: D(0.2),
+          ease: 'power2.out'
+        }, T(beat, 0.55));
+      }
+
+      // Pin the timeline length to exactly 1 so beats land on k / BEATS.
+      timeline.set({}, { x: 0 }, 1);
+
+      const clipFor = (amount) => {
+        if (amount <= 0.001) return 'circle(0px at 50% 50%)';
+
+        const cx = size.w * (0.5 + pose.xVw);
+        const cy = size.h * (0.5 + pose.yVh);
+        const reach = Math.hypot(
+          Math.max(cx, size.w - cx),
+          Math.max(cy, size.h - cy)
+        );
+
+        return `circle(${(reach * amount * 1.02).toFixed(1)}px at ${cx.toFixed(1)}px ${cy.toFixed(1)}px)`;
+      };
 
       const render = () => {
         if (!active) return;
@@ -450,16 +310,11 @@
         const roll = pose.roll + wobble.value;
 
         if (use3d && threeReady && phone3d) {
-          phone3d.setPose({
-            ...pose,
-            yaw,
-            pitch,
-            roll
-          });
+          phone3d.setPose({ ...pose, yaw, pitch, roll });
         } else if (phoneSlot) {
           gsap.set(phoneSlot, {
-            x: pose.xVw * window.innerWidth,
-            y: pose.yVh * window.innerHeight + idle.y,
+            x: pose.xVw * size.w,
+            y: pose.yVh * size.h + idle.y,
             z: pose.z,
             rotationY: yaw,
             rotationX: pitch,
@@ -468,94 +323,65 @@
           });
         }
 
-        if (pose.palette !== lastPalette) {
-          applyPalette(pose.palette);
-          lastPalette = pose.palette;
+        // Backdrops grow out of the phone's current position.
+        const clipTeal = clipFor(pose.reveal1);
+        const clipWhite = clipFor(pose.reveal2);
+
+        if (bgTeal && clipTeal !== lastClipTeal) {
+          bgTeal.style.clipPath = clipTeal;
+          lastClipTeal = clipTeal;
         }
 
-        const perspectiveKey = `${pose.persp}|${pose.originX}`;
-
-        if (perspectiveKey !== lastPerspective && stage) {
-          stage.style.perspective = `${pose.persp}px`;
-
-          stage.style.perspectiveOrigin =
-            `${pose.originX}% ${pose.originY}%`;
-
-          lastPerspective = perspectiveKey;
+        if (bgWhite && clipWhite !== lastClipWhite) {
+          bgWhite.style.clipPath = clipWhite;
+          lastClipWhite = clipWhite;
         }
 
         const radians = yaw * Math.PI / 180;
 
         if (phoneSlot) {
-          phoneSlot.style.setProperty(
-            '--sheen',
-            `${50 + Math.sin(radians) * 26}%`
-          );
-
-          phoneSlot.style.setProperty(
-            '--glass-pos',
-            `${50 + Math.cos(radians) * 38}%`
-          );
+          phoneSlot.style.setProperty('--sheen', `${50 + Math.sin(radians) * 26}%`);
+          phoneSlot.style.setProperty('--glass-pos', `${50 + Math.cos(radians) * 38}%`);
         }
 
         if (contactShadow) {
           const edge = Math.abs(Math.cos(radians));
 
           gsap.set(contactShadow, {
+            x: size.w * (0.5 + pose.xVw),
+            y: size.h * (0.5 + pose.yVh) + deviceHeight * pose.scale * 0.5 + 6,
+            xPercent: -50,
             scaleX: 0.72 + 0.28 * edge,
-            opacity: 0.1 + 0.08 * edge,
-            y: pose.yVh * window.innerHeight * 0.25
+            opacity: 0.1 + 0.08 * edge
           });
         }
 
         if (screenFade) {
-          const difference = Math.abs(
-            pose.screenF - Math.round(pose.screenF)
-          );
-
+          const difference = Math.abs(pose.screenF - Math.round(pose.screenF));
           screenFade.style.opacity = 1 - difference * 0.85;
         }
 
-        const nextScreen = clamp(
-          0,
-          features.length - 1,
-          Math.round(pose.screenF)
-        );
+        const nextScreen = clamp(0, features.length - 1, Math.round(pose.screenF));
 
         if (nextScreen !== screen) screen = nextScreen;
         if (nextScreen !== step) step = nextScreen;
       };
 
-      const tiltPitch = gsap.quickTo(pointer, 'x', {
-        duration: 0.65,
-        ease: 'power2.out'
-      });
-
-      const tiltYaw = gsap.quickTo(pointer, 'y', {
-        duration: 0.65,
-        ease: 'power2.out'
-      });
+      const tiltPitch = gsap.quickTo(pointer, 'x', { duration: 0.65, ease: 'power2.out' });
+      const tiltYaw = gsap.quickTo(pointer, 'y', { duration: 0.65, ease: 'power2.out' });
 
       const onPointer = (event) => {
         if (event.pointerType === 'touch') return;
 
         const bounds = stage.getBoundingClientRect();
-
-        const x = (
-          (event.clientX - bounds.left) / bounds.width - 0.5
-        ) * 2;
-
-        const y = (
-          (event.clientY - bounds.top) / bounds.height - 0.5
-        ) * 2;
+        const x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 2;
+        const y = ((event.clientY - bounds.top) / bounds.height - 0.5) * 2;
 
         tiltPitch(-y * 2.5);
         tiltYaw(x * 3.5);
       };
 
-      stage.addEventListener('pointermove', onPointer, {
-        passive: true
-      });
+      stage.addEventListener('pointermove', onPointer, { passive: true });
 
       const idleTween = gsap.to(idle, {
         y: 5,
@@ -576,6 +402,7 @@
 
       return () => {
         stage.removeEventListener('pointermove', onPointer);
+        window.removeEventListener('resize', measure);
         observer.disconnect();
         gsap.ticker.remove(render);
         idleTween.kill();
@@ -588,14 +415,6 @@
       reduced = true;
       screen = 0;
       step = 0;
-
-      applyPalette(0);
-
-      if (problem) gsap.set(problem, { autoAlpha: 1, y: 0 });
-      if (tagline) gsap.set(tagline, { autoAlpha: 1, y: 0 });
-      if (featureCopy) gsap.set(featureCopy, { autoAlpha: 1, y: 0 });
-      if (finalCopy) gsap.set(finalCopy, { autoAlpha: 1, y: 0 });
-      if (scrollHint) gsap.set(scrollHint, { autoAlpha: 0 });
 
       return () => {
         reduced = false;
@@ -614,10 +433,7 @@
       () => buildStory(false)
     );
 
-    media.add(
-      '(prefers-reduced-motion: reduce)',
-      buildReducedMotion
-    );
+    media.add('(prefers-reduced-motion: reduce)', buildReducedMotion);
 
     return () => {
       media.revert();
@@ -629,38 +445,32 @@
 <section
   class="scene"
   id="story"
+  style={`--beats: ${BEATS}`}
   bind:this={scene}
   class:reduced-motion={reduced}
-  aria-label="How patnub.ai helps you keep up with your care"
+  aria-label="How patnub.ai helps you understand your health"
 >
   <div class="stage" bind:this={stage}>
-    <div class="stage-decoration decor-orbit" aria-hidden="true"></div>
-    <div class="stage-decoration decor-dot" aria-hidden="true"></div>
-    <div class="stage-decoration decor-pill" aria-hidden="true"></div>
-
-    <div class="copy problem" bind:this={problem}>
-      <p class="kicker"><span></span> CARE SHOULD NOT END AT THE CLINIC</p>
-      <h1>The doctor explained it once.<br />Then you got home.</h1>
-      <p class="sub">
-        The paper gets misplaced. The details get fuzzy.
-        And the clinic may be out of reach.
-      </p>
-      <a class="text-link" href="#features">
-        See what you can keep <span aria-hidden="true">↓</span>
-      </a>
+    <div class="backdrop" aria-hidden="true">
+      <div class="bg bg-peach"></div>
+      <div class="bg bg-teal" bind:this={bgTeal}></div>
+      <div class="bg bg-white" bind:this={bgWhite}></div>
     </div>
 
-    <div class="copy tagline" bind:this={tagline}>
-      <p class="kicker"><span></span> MEET PATNUB.AI</p>
-      <h2>Care that<br />stays with you.</h2>
+    <div class="copy problem scheme-peach" bind:this={problem}>
+      <h1>Do you ever wish understanding your health was easier?</h1>
+    </div>
+
+    <div class="copy tagline scheme-teal" bind:this={tagline}>
+      <h2>Your doctor’s note, in plain words.</h2>
       <p class="sub">
-        Your doctor's note stays on your phone.
-        The assistant helps explain it in plain language, even offline.
+        patnub.ai keeps your clinician’s instructions on your phone
+        and explains them in plain language, even offline.
       </p>
     </div>
 
     {#if reduced}
-      <div class="static-features">
+      <div class="static-features scheme-white">
         {#each features as feature, i}
           <article>
             <span class="static-number">0{i + 1}</span>
@@ -670,23 +480,18 @@
         {/each}
       </div>
     {:else}
-      <div class="copy feature-copy" bind:this={featureCopy}>
-        <p class="kicker"><span></span> 0{step + 1} / HOW IT WORKS</p>
+      <div class="copy feature-copy scheme-white" bind:this={featureCopy}>
         <h2>{features[step].title}</h2>
         <p class="sub">{features[step].body}</p>
-        <p class="micro-note">A little more clarity, right in your pocket.</p>
       </div>
     {/if}
 
-    <div class="final-copy" bind:this={finalCopy}>
-      <p class="kicker"><span></span> YOUR CARE, CLOSE AT HAND</p>
-      <h2>Keep the details.<br />Feel more prepared.</h2>
-      <a href="#features">
-        Explore the features <span aria-hidden="true">↗</span>
-      </a>
-    </div>
-
-    <div class="contact-shadow" bind:this={contactShadow} aria-hidden="true"></div>
+    <div
+      class="contact-shadow"
+      bind:this={contactShadow}
+      style={`width: ${deviceHeight * 0.5}px`}
+      aria-hidden="true"
+    ></div>
 
     {#if use3d && !reduced && Phone3DLazy}
       <Phone3DLazy
@@ -717,7 +522,7 @@
     </div>
 
     {#if !reduced}
-      <div class="rail-wrap">
+      <div class="rail-wrap scheme-white" bind:this={railWrap}>
         <StepRail
           steps={features.map((feature) => feature.short)}
           active={step}
@@ -726,18 +531,19 @@
       </div>
     {/if}
 
-    <div class="scroll-hint" bind:this={scrollHint}>
+    <div class="scroll-hint scheme-peach" bind:this={scrollHint}>
       <span class="hint-line"></span>
-      SCROLL TO EXPLORE
+      SCROLL
       <span class="material-symbols-rounded">south</span>
     </div>
   </div>
 </section>
 
 <style>
+  /* Each beat is one viewport tall; the stage stays pinned while we scroll. */
   .scene {
     position: relative;
-    height: 440vh;
+    height: calc((var(--beats) + 1) * 100svh);
   }
 
   .stage {
@@ -747,113 +553,93 @@
     min-height: 620px;
     overflow: hidden;
     perspective: 1180px;
-    perspective-origin: 52% 50%;
+    perspective-origin: 50% 50%;
     isolation: isolate;
-    background: var(--stage-bg);
-    color: var(--stage-ink);
-    transition: background-color 180ms linear;
   }
 
-  .stage::before {
+  /* Colour schemes: every block of copy keeps the scheme of the backdrop it sits on. */
+  .scheme-peach {
+    --stage-ink: var(--md-on-tertiary-container);
+    --stage-muted: #5e4630;
+    --stage-accent: var(--md-tertiary);
+    --stage-soft: #ffebd6;
+  }
+
+  .scheme-teal {
+    --stage-ink: #f5fbf8;
+    --stage-muted: #d0e7df;
+    --stage-accent: #d2f2e8;
+    --stage-soft: #28796d;
+  }
+
+  .scheme-white,
+  .reduced-motion .scheme-peach,
+  .reduced-motion .scheme-teal {
+    --stage-ink: #17231f;
+    --stage-muted: #52645e;
+    --stage-accent: #0e8f7e;
+    --stage-soft: #dff3ed;
+  }
+
+  /* Backdrops: peach is the base; teal and white grow out of the phone. */
+  .backdrop {
     position: absolute;
     inset: 0;
-    z-index: -1;
-    background-image: radial-gradient(
-      rgba(24, 76, 64, .055) .7px,
-      transparent .7px
-    );
-    background-size: 18px 18px;
-    opacity: .32;
-    content: '';
+    z-index: 0;
     pointer-events: none;
   }
 
-  .stage-decoration {
+  .bg {
     position: absolute;
-    z-index: 1;
-    pointer-events: none;
+    inset: 0;
   }
 
-  .decor-orbit {
-    top: 14%;
-    right: 12%;
-    width: min(40vw, 520px);
-    aspect-ratio: 1;
-    border: 1px solid rgba(14, 143, 126, .13);
-    border-radius: 50%;
+  .bg-peach { background: var(--md-tertiary-container); }
+
+  .bg-teal {
+    background: #0e6257;
+    clip-path: circle(0px at 50% 50%);
   }
 
-  .decor-orbit::before,
-  .decor-orbit::after {
-    position: absolute;
-    border: 1px solid rgba(14, 143, 126, .1);
-    border-radius: 50%;
-    content: '';
-  }
-
-  .decor-orbit::before { inset: 13%; }
-  .decor-orbit::after { inset: 27%; }
-
-  .decor-dot {
-    top: 23%;
-    right: 15%;
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    background: #efbd8d;
-    box-shadow: 0 0 0 9px rgba(239, 189, 141, .18);
-  }
-
-  .decor-pill {
-    right: 10%;
-    bottom: 18%;
-    width: 16px;
-    height: 56px;
-    border-radius: 99px;
-    background: var(--stage-accent);
-    opacity: .22;
-    transform: rotate(35deg);
+  .bg-white {
+    background: #ffffff;
+    clip-path: circle(0px at 50% 50%);
   }
 
   .copy {
     position: absolute;
-    top: clamp(168px, 39svh, 410px);
+    top: 50%;
     left: 8%;
     z-index: 8;
     width: min(39%, 520px);
     translate: 0 -50%;
+    color: var(--stage-ink);
   }
 
   .tagline,
-  .feature-copy,
-  .final-copy {
+  .feature-copy {
     visibility: hidden;
     opacity: 0;
   }
 
   .problem {
-    visibility: visible;
-    opacity: 1;
+    left: 50%;
+    width: min(88%, 1180px);
+    translate: -50% -50%;
+    text-align: center;
   }
 
-  .kicker {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    margin: 0 0 16px;
-    color: var(--stage-accent);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: .15em;
+  .problem h1 {
+    max-width: 15ch;
+    margin: 0 auto;
+    font-size: clamp(3rem, 7.2vw, 7.4rem);
+    line-height: 0.98;
   }
 
-  .kicker > span {
-    width: 8px;
-    height: 8px;
-    flex: none;
-    border-radius: 50%;
-    background: currentColor;
-    box-shadow: 0 0 0 4px rgba(14, 143, 126, .11);
+  .feature-copy {
+    right: 14%;
+    left: auto;
+    width: min(32%, 460px);
   }
 
   h1,
@@ -861,10 +647,10 @@
     margin: 0 0 18px;
     color: var(--stage-ink);
     font-family: var(--font-display);
-    font-size: clamp(2.8rem, 5vw, 5rem);
+    font-size: clamp(2.6rem, 4.6vw, 4.6rem);
     font-weight: 500;
-    letter-spacing: -.04em;
-    line-height: .99;
+    letter-spacing: -0.04em;
+    line-height: 0.99;
     text-wrap: balance;
   }
 
@@ -874,74 +660,6 @@
     color: var(--stage-muted);
     font-size: clamp(1rem, 1.25vw, 1.15rem);
     line-height: 1.65;
-  }
-
-  .text-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-    margin-top: 26px;
-    color: var(--stage-accent);
-    font-size: 13px;
-    font-weight: 700;
-    text-decoration: none;
-  }
-
-  .text-link span {
-    transition: transform 180ms ease;
-  }
-
-  .text-link:hover span {
-    transform: translateY(4px);
-  }
-
-  .feature-copy h2 {
-    font-size: clamp(2.65rem, 4.6vw, 4.5rem);
-  }
-
-  .micro-note {
-    display: inline-flex;
-    margin: 23px 0 0;
-    padding: 9px 13px;
-    border-radius: 99px;
-    color: var(--stage-ink);
-    background: var(--stage-soft);
-    font-size: 11px;
-    font-weight: 600;
-  }
-
-  .final-copy {
-    position: absolute;
-    top: clamp(168px, 39svh, 410px);
-    left: 8%;
-    z-index: 9;
-    width: min(42%, 560px);
-    translate: 0 -50%;
-  }
-
-  .final-copy h2 {
-    font-size: clamp(2.8rem, 4.7vw, 4.7rem);
-  }
-
-  .final-copy a {
-    display: inline-flex;
-    align-items: center;
-    gap: 11px;
-    padding: 14px 21px;
-    border-radius: var(--shape-full);
-    color: var(--md-on-primary-container);
-    background: var(--md-primary-container);
-    font-size: 13px;
-    font-weight: 700;
-    text-decoration: none;
-    transition:
-      transform 220ms cubic-bezier(.2, .8, .2, 1),
-      box-shadow 220ms ease;
-  }
-
-  .final-copy a:hover {
-    transform: translateY(-3px) scale(1.02);
-    box-shadow: 0 9px 25px rgba(14, 143, 126, .2);
   }
 
   .phone-slot {
@@ -982,23 +700,25 @@
 
   .contact-shadow {
     position: absolute;
-    top: calc(50% + 28svh);
-    left: calc(50% + 19vw);
+    top: 0;
+    left: 0;
     z-index: 2;
-    width: 240px;
     height: 40px;
-    margin-left: -120px;
     border-radius: 50%;
-    background: rgba(25, 69, 57, .12);
+    background: rgba(25, 69, 57, 0.14);
     filter: blur(18px);
+    opacity: 0;
+    pointer-events: none;
   }
 
   .rail-wrap {
     position: absolute;
     top: 50%;
-    right: 4%;
+    right: 3%;
     z-index: 10;
     translate: 0 -50%;
+    visibility: hidden;
+    opacity: 0;
   }
 
   .scroll-hint {
@@ -1014,14 +734,14 @@
     color: var(--stage-muted);
     font-size: 9px;
     font-weight: 700;
-    letter-spacing: .15em;
+    letter-spacing: 0.15em;
   }
 
   .hint-line {
     width: 30px;
     height: 1px;
     background: var(--stage-accent);
-    opacity: .5;
+    opacity: 0.5;
   }
 
   .scroll-hint .material-symbols-rounded {
@@ -1029,6 +749,7 @@
     font-size: 15px;
   }
 
+  /* Reduced motion: one static page, no pinning. */
   .static-features {
     position: absolute;
     top: 52%;
@@ -1044,14 +765,14 @@
     padding: 14px 16px;
     border: 1px solid var(--md-outline-variant);
     border-radius: 18px;
-    background: rgba(255, 255, 255, .7);
+    background: rgba(255, 255, 255, 0.7);
   }
 
   .static-number {
     color: var(--md-primary);
     font-size: 10px;
     font-weight: 700;
-    letter-spacing: .1em;
+    letter-spacing: 0.1em;
   }
 
   .static-features h3 {
@@ -1077,6 +798,18 @@
     position: relative;
     min-height: 900px;
     padding-top: 100px;
+    background: #ffffff;
+  }
+
+  .reduced-motion .bg-peach,
+  .reduced-motion .bg-teal,
+  .reduced-motion .scroll-hint,
+  .reduced-motion .contact-shadow {
+    display: none;
+  }
+
+  .reduced-motion .bg-white {
+    clip-path: none;
   }
 
   .reduced-motion .copy.problem,
@@ -1087,10 +820,15 @@
     width: auto;
     margin: 0 7% 28px;
     translate: none;
+    visibility: visible;
+    opacity: 1;
+    text-align: left;
   }
 
-  .reduced-motion .copy.tagline {
-    display: none;
+  .reduced-motion .problem h1 {
+    max-width: 18ch;
+    margin: 0;
+    font-size: clamp(2.4rem, 5vw, 4.4rem);
   }
 
   .reduced-motion .static-features {
@@ -1109,85 +847,56 @@
       translate(-50%, -50%)
       rotateY(-12deg)
       rotateX(3deg)
-      scale(.86);
-  }
-
-  .reduced-motion .contact-shadow {
-    display: none;
+      scale(0.86);
   }
 
   @media (max-width: 1100px) and (min-width: 768px) {
-    .copy {
+    .tagline {
       left: 6%;
-      width: 37%;
+      width: 40%;
     }
 
-    .rail-wrap {
-      right: 2%;
+    .feature-copy {
+      right: 12%;
+      width: 34%;
     }
 
-    .contact-shadow {
-      left: calc(50% + 18vw);
-    }
+    .rail-wrap { right: 2%; }
 
     h1,
-    h2 {
-      font-size: clamp(2.5rem, 4.5vw, 4rem);
-    }
+    h2 { font-size: clamp(2.4rem, 4.5vw, 4rem); }
   }
 
+  /* Mobile is reworked after desktop is finished; this is only a safe fallback. */
   @media (max-width: 767px) {
-    .scene {
-      height: 380vh;
-    }
-
-    .stage {
-      min-height: 600px;
-    }
-
-    .stage::before {
-      background-size: 22px 22px;
-      opacity: .2;
-    }
-
-    .decor-orbit {
-      top: 42%;
-      right: -20%;
-      width: 74vw;
-    }
-
-    .decor-dot {
-      top: 47%;
-      right: 16%;
-      width: 11px;
-      height: 11px;
-    }
-
-    .decor-pill {
-      right: 8%;
-      bottom: 12%;
-      width: 12px;
-      height: 42px;
-    }
+    .stage { min-height: 600px; }
 
     .copy {
-      top: clamp(104px, 15svh, 132px);
+      top: clamp(96px, 14svh, 130px);
       left: 7%;
       width: 86%;
       translate: none;
     }
 
-    .kicker {
-      margin-bottom: 12px;
-      font-size: 8px;
-      letter-spacing: .12em;
+    .copy.problem {
+      top: 50%;
+      left: 50%;
+      translate: -50% -50%;
     }
+
+    .copy.feature-copy {
+      right: auto;
+      left: 7%;
+      width: 86%;
+    }
+
+    .problem h1 { font-size: clamp(2.6rem, 12vw, 3.6rem); }
 
     h1,
     h2 {
       max-width: 12ch;
       margin-bottom: 12px;
-      font-size: clamp(2.45rem, 10vw, 3.4rem);
+      font-size: clamp(2.3rem, 9.5vw, 3.2rem);
     }
 
     .sub {
@@ -1196,51 +905,11 @@
       line-height: 1.55;
     }
 
-    .text-link {
-      margin-top: 15px;
-      font-size: 12px;
-    }
-
-    .feature-copy h2 {
-      font-size: clamp(2.3rem, 9vw, 3rem);
-    }
-
-    .micro-note {
-      margin-top: 13px;
-      padding: 7px 10px;
-      font-size: 9px;
-    }
-
-    .final-copy {
-      top: clamp(104px, 15svh, 132px);
-      left: 7%;
-      width: 86%;
-      translate: none;
-    }
-
-    .final-copy h2 {
-      font-size: clamp(2.45rem, 10vw, 3.3rem);
-    }
-
-    .final-copy a {
-      padding: 12px 17px;
-      font-size: 12px;
-    }
-
-    .contact-shadow {
-      top: calc(67% + 125px);
-      left: 50%;
-      width: 170px;
-      margin-left: -85px;
-    }
+    .rail-wrap { display: none; }
 
     .scroll-hint {
       bottom: 17px;
       font-size: 8px;
-    }
-
-    .scroll-hint .hint-line {
-      width: 20px;
     }
 
     .static-features {
@@ -1256,29 +925,18 @@
       border-radius: 14px;
     }
 
-    .static-features h3 {
-      font-size: 16px;
-    }
+    .static-features h3 { font-size: 16px; }
+    .static-features p { font-size: 10px; }
 
-    .static-features p {
-      font-size: 10px;
-    }
+    .reduced-motion .stage { min-height: 1100px; }
 
-    .reduced-motion .stage {
-      min-height: 1100px;
-    }
-
-    .reduced-motion .copy.problem {
-      margin: 0 7% 20px;
-    }
+    .reduced-motion .copy.problem { margin: 0 7% 20px; }
 
     .reduced-motion .static-features {
       bottom: 25px;
       width: 86%;
     }
 
-    .reduced-motion .phone-slot {
-      display: none;
-    }
+    .reduced-motion .phone-slot { display: none; }
   }
 </style>

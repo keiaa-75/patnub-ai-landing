@@ -1,51 +1,120 @@
 :root {
-  --font: 'Manrope', system-ui, -apple-system, sans-serif;
+  color-scheme: light;
 
-  /* Palette tokens. Initial values deliberately match the JS timeline's
-     start state so first paint never flashes the wrong colour. */
-  --c1: #FF6B4A;
-  --c2: #FFB199;
-  --c3: #8E2A22;
-  --glow: #FFD9C4;
-  --glow-x: 26%;
-  --glow-y: 50%;
-  --glow-alpha: 0.45;
+  --font-display: 'Fredoka', 'Roboto', sans-serif;
+  --font-body: 'Roboto', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font: var(--font-body);
 
-  --accent: #FFEDE6;
-  --accent-soft: #FFD9CC;
-  --accent-ink: #7A2418;
-  --screen-bg: #FFF9F6;
-  --screen-ink: #241713;
+  /* Material-inspired roles, anchored to patnub.ai's existing teal. */
+  --md-primary: #0e8f7e;
+  --md-on-primary: #ffffff;
+  /* Darker action shade keeps white button labels comfortably readable. */
+  --md-primary-strong: #0b796b;
+  --md-primary-container: #c9eee5;
+  --md-on-primary-container: #073d35;
+  --md-secondary: #526963;
+  --md-on-secondary: #ffffff;
+  --md-secondary-container: #d5e8e1;
+  --md-on-secondary-container: #172f29;
+  --md-tertiary: #8a5b32;
+  --md-tertiary-container: #ffddbd;
+  --md-background: #f5faf8;
+  --md-surface: #f5faf8;
+  --md-surface-container-low: #eff5f2;
+  --md-surface-container: #e8efec;
+  --md-surface-container-high: #e1e9e5;
+  --md-on-surface: #17231f;
+  --md-on-surface-variant: #52645e;
+  --md-outline: #84958e;
+  --md-outline-variant: #d1ddd7;
+  --md-error: #ba1a1a;
 
-  --ink: #ffffff;
-  --muted: rgba(255, 255, 255, 0.7);
+  --stage-bg: #f5faf8;
+  --stage-ink: #17231f;
+  --stage-muted: #52645e;
+  --stage-accent: #0e8f7e;
+  --stage-soft: #dff3ed;
 
-  --phone-w: 280px;
-  --phone-d: 20px;
-  --phone-radius: 42px;
+  --accent: var(--md-primary);
+  --accent-ink: var(--md-on-primary);
+  --screen-bg: #f7faf8;
+  --screen-ink: #17231f;
+  --ink: var(--md-on-surface);
+  --muted: var(--md-on-surface-variant);
 
-  --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  --phone-w: 272px;
+  --phone-d: 18px;
+  --phone-radius: 34px;
+
+  --shape-xs: 8px;
+  --shape-sm: 12px;
+  --shape-md: 18px;
+  --shape-lg: 24px;
+  --shape-xl: 30px;
+  --shape-full: 999px;
+
+  --shadow-card: 0 10px 28px rgba(27, 58, 49, 0.07);
+  --shadow-float: 0 22px 56px rgba(24, 68, 57, 0.16);
 }
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
-
-html, body { margin: 0; }
-
-body {
-  font-family: var(--font);
-  color: var(--ink);
-  background: var(--c3);
-  -webkit-font-smoothing: antialiased;
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 88px;
 }
 
-::selection { background: var(--accent); color: var(--accent-ink); }
+html, body { margin: 0; min-width: 320px; }
+
+body {
+  font-family: var(--font-body);
+  color: var(--md-on-surface);
+  background: var(--md-background);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button, a { -webkit-tap-highlight-color: transparent; }
+
+button, input, textarea, select { font: inherit; }
+
+::selection {
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+}
+
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
 
 @media (max-width: 767px) {
   :root {
-    --phone-w: 226px;
-    --phone-d: 16px;
-    --phone-radius: 34px;
+    --phone-w: 136px;
+    --phone-d: 15px;
+    --phone-radius: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

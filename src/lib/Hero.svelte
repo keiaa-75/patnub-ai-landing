@@ -5,6 +5,7 @@
   import Phone from './Phone.svelte';
   import DemoScreens from './DemoScreens.svelte';
   import Shapes from './Shapes.svelte';
+  import { spatial, effects } from './motion.js';
 
   /*
     The story is a row of full-viewport "beats". Scrolling rests on each one:
@@ -21,6 +22,34 @@
   const BEATS = 5;
   const FIRST_FEATURE_BEAT = 2;
   const SNAP = true;
+  // How long the story takes to catch up with the scroll position (seconds).
+  // Snapping adds its own easing on top, so keep this fairly low.
+  const SCRUB = 0.4;
+
+  // Temporary switches for finding slowdowns: add ?noshapes and/or ?no3d to the URL.
+  const FLAGS = typeof window === 'undefined'
+    ? new URLSearchParams()
+    : new URLSearchParams(window.location.search);
+  const NO_SHAPES = FLAGS.has('noshapes');
+  const NO_3D = FLAGS.has('no3d');
+
+  // Wait two frames so the shapes' entrance never competes with the first 3D frames.
+  const settle = (fn) => requestAnimationFrame(() => requestAnimationFrame(fn));
+
+  // Resolves when the display fonts are ready, or after the timeout.
+  const whenFontsReady = (timeout) => {
+    const loading = document.fonts?.load
+      ? Promise.all([
+          document.fonts.load('600 64px Fredoka'),
+          document.fonts.load('400 16px Roboto')
+        ])
+      : Promise.resolve();
+
+    return Promise.race([
+      loading.catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, timeout))
+    ]);
+  };
 
   // Timeline position of a beat, plus a fraction of the way to the next one.
   const T = (beat, fraction = 0) => (beat + fraction) / BEATS;
@@ -44,7 +73,7 @@
   let screen = $state(0);
   let step = $state(0);
   let reduced = $state(false);
-  let use3d = $state(true);
+  let use3d = $state(!NO_3D);
   let threeReady = $state(false);
   let Phone3DLazy = $state(null);
 
@@ -89,6 +118,8 @@
     deviceHeight = getDeviceHeight();
   }
 
+  const startShapes = () => settle(() => shapes?.enter());
+
   onMount(() => {
     gsap.registerPlugin(ScrollTrigger);
 
@@ -101,7 +132,11 @@
       })
       .catch(() => {
         use3d = false;
+        startShapes();
       });
+
+    // Without the 3D phone there is nothing to wait for.
+    if (!use3d) startShapes();
 
     const buildStory = (isDesktop) => {
       reduced = false;
@@ -153,6 +188,21 @@
       screen = 0;
       step = 0;
 
+      // Opening: the question rises in once the display font is ready, so the
+      // text never jumps when the font swaps. This animates the heading only;
+      // the scroll timeline owns the .problem block around it.
+      const headline = problem.querySelector('h1');
+      let cancelled = false;
+
+      gsap.set(headline, { y: 28 });
+
+      whenFontsReady(1500).then(() => {
+        if (cancelled) return;
+
+        gsap.to(headline, { opacity: 1, duration: 0.6, ease: effects });
+        gsap.to(headline, { y: 0, duration: 0.95, ease: spatial });
+      });
+
       const timeline = gsap.timeline({
         defaults: { ease: 'none' },
 
@@ -161,12 +211,12 @@
           trigger: scene,
           start: 'top top',
           end: 'bottom bottom',
-          scrub: 0.72,
+          scrub: SCRUB,
           invalidateOnRefresh: true,
           snap: SNAP
             ? {
                 snapTo: 1 / BEATS,
-                duration: { min: 0.25, max: 0.7 },
+                duration: { min: 0.2, max: 0.6 },
                 delay: 0.1,
                 ease: 'power2.inOut'
               }
@@ -398,6 +448,9 @@
       render();
 
       return () => {
+        cancelled = true;
+        gsap.killTweensOf(headline);
+        gsap.set(headline, { clearProps: 'opacity,transform' });
         stage.removeEventListener('pointermove', onPointer);
         window.removeEventListener('resize', measure);
         observer.disconnect();
@@ -454,7 +507,7 @@
       <div class="bg bg-white" bind:this={bgWhite}></div>
     </div>
 
-    {#if !reduced}
+    {#if !reduced && !NO_SHAPES}
       <Shapes bind:this={shapes} beats={BEATS} />
     {/if}
 
@@ -500,10 +553,14 @@
         screens={SCREEN_URLS}
         phoneHeight={deviceHeight}
         baseTop={0.5}
-        onready={() => (threeReady = true)}
+        onready={() => {
+          threeReady = true;
+          startShapes();
+        }}
         onfail={() => {
           use3d = false;
           threeReady = false;
+          startShapes();
         }}
       />
     {/if}
@@ -628,11 +685,13 @@
     text-align: center;
   }
 
+  /* Hidden until the font is ready; the opening animation reveals it. */
   .problem h1 {
     max-width: 15ch;
     margin: 0 auto;
     font-size: clamp(3rem, 7.2vw, 7.4rem);
     line-height: 0.98;
+    opacity: 0;
   }
 
   .feature-copy {
@@ -817,6 +876,7 @@
     max-width: 18ch;
     margin: 0;
     font-size: clamp(2.4rem, 5vw, 4.4rem);
+    opacity: 1;
   }
 
   .reduced-motion .static-features {

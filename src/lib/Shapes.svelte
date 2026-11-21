@@ -12,9 +12,17 @@
 
     Blobs are drawn from polar radii, so any two of them can morph into each
     other. Pills are plain rounded rectangles.
+
+    Performance notes:
+      - Continuous spinning and swaying run as CSS animations on promoted
+        layers, so they cost no JavaScript per frame.
+      - Each shape's element is only as big as the largest size it ever uses.
+      - Only one blob morphs at a time, and never during a beat change.
+      - Nothing appears until enter() is called, so the entrance does not
+        compete with the 3D phone loading.
   */
 
-  const N = 96;
+  const N = 72;
   const TAU = Math.PI * 2;
 
   const normalized = (fn) => {
@@ -64,7 +72,10 @@
     return `${d}Z`;
   };
 
-  /* Index order matters: it matches every row of the layout tables below. */
+  /*
+    Index order matters: it matches every row of the layout tables below.
+    spin is the seconds per turn; a negative value turns the other way.
+  */
   const SHAPES = [
     { id: 'halo', kind: 'blob', cycle: ['cookie9', 'flower5', 'burst10'], depth: 0.4, spin: 80 },
     { id: 'burst', kind: 'blob', cycle: ['burst10', 'cookie9', 'clover4'], depth: 0.8, spin: -65 },
@@ -72,8 +83,8 @@
     { id: 'squircle', kind: 'blob', cycle: ['squircle', 'pebble3', 'flower5'], depth: 0.6, spin: -90 },
     { id: 'flower', kind: 'blob', cycle: ['flower5', 'clover4', 'burst10'], depth: 0.9, spin: 70 },
     { id: 'pebble', kind: 'blob', cycle: ['pebble3', 'squircle', 'cookie9'], depth: 1.3, spin: -50 },
-    { id: 'pill-a', kind: 'pill', depth: 1.2 },
-    { id: 'pill-b', kind: 'pill', depth: 0.7 }
+    { id: 'pill-a', kind: 'pill', depth: 1.2, spin: 3.6 },
+    { id: 'pill-b', kind: 'pill', depth: 0.7, spin: 4.4 }
   ];
 
   // x, y: centre as a fraction of the stage. k: size in stage-height units
@@ -114,6 +125,12 @@
     L(0.1, 0.84, 1, -30, '#c9eee5')
   ];
 
+  // Each element is as big as the largest size its shape ever uses, and is
+  // only scaled down from there. Small shapes therefore stay small layers.
+  const SIZE = SHAPES.map((_, i) =>
+    Math.max(PEACH[i].k, TEAL[i].k, WHITE[i].k)
+  );
+
   // Each feature beat nudges and turns the white layout a little further.
   const DRIFT = [
     [0, 0], [-0.02, -0.015], [0.05, 0.01], [0.03, 0.05],
@@ -134,7 +151,7 @@
     }));
   };
 
-  const api = { goTo: () => {}, setProgress: () => {} };
+  const api = { goTo: () => {}, setProgress: () => {}, enter: () => {} };
 
   let host;
   const shapeEls = [];
@@ -147,11 +164,18 @@
     if (!window.matchMedia('(min-width: 768px)').matches) return;
 
     const size = { w: 1, h: 1 };
+    const blobIndexes = SHAPES.flatMap((shape, i) => (shape.kind === 'blob' ? [i] : []));
     const radii = SHAPES.map((shape) =>
       shape.kind === 'blob' ? Float32Array.from(PRESETS[shape.cycle[0]]) : null
     );
-    const timers = [];
+    const cycleIndex = SHAPES.map(() => 0);
+
     let current = 0;
+    let entered = false;
+    let lastTransition = 0;
+    let cursor = 0;
+    let morphTimer = null;
+    let fallbackTimer = null;
 
     const measure = () => {
       size.w = host.clientWidth;
@@ -172,9 +196,17 @@
       current = beat;
       const layout = layoutFor(beat);
 
+      if (!instant) lastTransition = performance.now();
+
       SHAPES.forEach((shape, i) => {
         const l = layout[i];
-        const pose = { x: l.x * size.w, y: l.y * size.h, scale: l.k, rotation: l.r };
+
+        const pose = {
+          x: l.x * size.w,
+          y: l.y * size.h,
+          scale: l.k / SIZE[i],
+          rotation: l.r
+        };
 
         if (instant) {
           gsap.killTweensOf([shapeEls[i], fillTarget(i)]);
@@ -183,7 +215,7 @@
           return;
         }
 
-        const delay = i * 0.04 + (enter ? 0.15 : 0);
+        const delay = i * 0.04 + (enter ? 0.1 : 0);
 
         gsap.to(shapeEls[i], {
           ...pose,
@@ -222,64 +254,67 @@
       });
     };
 
+    // One blob at a time, round-robin, and never right after a beat change.
+    const nextMorph = () => {
+      if (performance.now() - lastTransition > 1800) {
+        const i = blobIndexes[cursor % blobIndexes.length];
+        cursor += 1;
+
+        const cycle = SHAPES[i].cycle;
+        cycleIndex[i] = (cycleIndex[i] + 1) % cycle.length;
+        morph(i, cycle[cycleIndex[i]]);
+      }
+
+      morphTimer = gsap.delayedCall(gsap.utils.random(2.4, 4), nextMorph);
+    };
+
+    const enter = () => {
+      if (entered) return;
+
+      entered = true;
+      clearTimeout(fallbackTimer);
+
+      apply(current, { enter: true });
+      morphTimer = gsap.delayedCall(3, nextMorph);
+    };
+
     measure();
 
-    gsap.set(shapeEls, { xPercent: -50, yPercent: -50, scale: 0 });
+    gsap.set(shapeEls, { xPercent: -50, yPercent: -50 });
     apply(0, { instant: true });
     gsap.set(shapeEls, { scale: 0 });
-    SHAPES.forEach((shape, i) => shape.kind === 'blob' && draw(i));
+    blobIndexes.forEach(draw);
 
-    // Entrance: pop in with the spatial spring.
-    apply(0, { enter: true });
-
-    // Idle: slow spin for blobs, a gentle sway for pills, and an occasional morph.
-    SHAPES.forEach((shape, i) => {
-      if (shape.kind === 'blob') {
-        gsap.to(innerEls[i], {
-          rotation: shape.spin > 0 ? '+=360' : '-=360',
-          duration: Math.abs(shape.spin),
-          ease: 'none',
-          repeat: -1
-        });
-
-        let index = 0;
-
-        const loop = () => {
-          index = (index + 1) % shape.cycle.length;
-          morph(i, shape.cycle[index]);
-          timers.push(gsap.delayedCall(gsap.utils.random(5, 9), loop));
-        };
-
-        timers.push(gsap.delayedCall(gsap.utils.random(2, 6), loop));
-      } else {
-        gsap.to(innerEls[i], {
-          rotation: 8,
-          duration: 3.2 + i * 0.4,
-          ease: 'sine.inOut',
-          yoyo: true,
-          repeat: -1
-        });
-      }
-    });
+    // Safety net: if nobody calls enter(), start anyway.
+    fallbackTimer = setTimeout(enter, 3500);
 
     let firstObservation = true;
 
     const resizeObserver = new ResizeObserver(() => {
-      // The observer reports once on observe(); that must not cancel the entrance.
+      // The observer reports once on observe(); that must not cancel anything.
       if (firstObservation) {
         firstObservation = false;
         return;
       }
 
       measure();
-      apply(current, { instant: true });
+
+      // Before the entrance the shapes must stay hidden.
+      if (entered) apply(current, { instant: true });
     });
 
     resizeObserver.observe(host);
 
     const parallax = parEls.map((el) => gsap.quickSetter(el, 'y', 'px'));
 
+    api.enter = enter;
+
     api.goTo = (beat) => {
+      if (!entered) {
+        current = beat;
+        return;
+      }
+
       if (beat !== current) apply(beat);
     };
 
@@ -289,12 +324,18 @@
 
     return () => {
       resizeObserver.disconnect();
-      timers.forEach((timer) => timer.kill());
-      gsap.killTweensOf([...shapeEls, ...innerEls, ...pathEls]);
+      clearTimeout(fallbackTimer);
+      morphTimer?.kill();
+      gsap.killTweensOf([...shapeEls, ...pathEls, ...innerEls]);
+      api.enter = () => {};
       api.goTo = () => {};
       api.setProgress = () => {};
     };
   });
+
+  export function enter() {
+    api.enter();
+  }
 
   export function goTo(beat) {
     api.goTo(beat);
@@ -307,14 +348,23 @@
 
 <div class="shapes" bind:this={host} aria-hidden="true">
   {#each SHAPES as shape, i (shape.id)}
-    <div class="shape" class:pill={shape.kind === 'pill'} bind:this={shapeEls[i]}>
+    <div class="shape" class:pill={shape.kind === 'pill'} style={`--s: ${SIZE[i]}`} bind:this={shapeEls[i]}>
       <div class="par" bind:this={parEls[i]}>
         {#if shape.kind === 'blob'}
-          <svg class="inner" viewBox="-1 -1 2 2" bind:this={innerEls[i]}>
+          <svg
+            class="inner blob"
+            viewBox="-1 -1 2 2"
+            style={`--dur: ${Math.abs(shape.spin)}s; --dir: ${shape.spin < 0 ? 'reverse' : 'normal'}; --phase: -${(i * 17) % 60}s`}
+            bind:this={innerEls[i]}
+          >
             <path bind:this={pathEls[i]} d="" />
           </svg>
         {:else}
-          <div class="inner pill-body" bind:this={innerEls[i]}></div>
+          <div
+            class="inner pill-body"
+            style={`--dur: ${shape.spin}s; --phase: -${i}s`}
+            bind:this={innerEls[i]}
+          ></div>
         {/if}
       </div>
     </div>
@@ -334,8 +384,8 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: var(--u, 100svh);
-    height: var(--u, 100svh);
+    width: calc(var(--u, 100svh) * var(--s));
+    height: calc(var(--u, 100svh) * var(--s));
     will-change: transform;
   }
 
@@ -351,8 +401,30 @@
     height: 100%;
   }
 
+  /* Promoted layers: spinning and swaying never touch the main thread. */
+  .inner {
+    will-change: transform;
+  }
+
+  .blob {
+    animation: spin var(--dur) linear infinite;
+    animation-direction: var(--dir);
+    animation-delay: var(--phase);
+  }
+
   .pill-body {
     border-radius: 999px;
+    animation: sway var(--dur) ease-in-out infinite alternate;
+    animation-delay: var(--phase);
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes sway {
+    from { transform: rotate(-8deg); }
+    to { transform: rotate(8deg); }
   }
 
   @media (max-width: 767px) {

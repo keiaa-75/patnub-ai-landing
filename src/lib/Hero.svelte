@@ -606,13 +606,20 @@
     clip-path: circle(0px at 50% 50%);
   }
 
+  /*
+    Vertical centering uses inset + auto margins, never transform/translate.
+    GSAP animates these blocks, and it turns a CSS translate such as -50%
+    into fixed pixels the first time it touches the element. That freezes the
+    offset, so the text drifts off-centre after a resize, zoom or font load.
+  */
   .copy {
     position: absolute;
-    top: 50%;
+    inset-block: 0;
+    height: fit-content;
+    margin-block: auto;
     left: 8%;
     z-index: 8;
     width: min(39%, 520px);
-    translate: 0 -50%;
     color: var(--stage-ink);
   }
 
@@ -623,9 +630,10 @@
   }
 
   .problem {
-    left: 50%;
+    right: 0;
+    left: 0;
     width: min(88%, 1180px);
-    translate: -50% -50%;
+    margin-inline: auto;
     text-align: center;
   }
 
@@ -648,7 +656,7 @@
     color: var(--stage-ink);
     font-family: var(--font-display);
     font-size: clamp(2.6rem, 4.6vw, 4.6rem);
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: -0.04em;
     line-height: 0.99;
     text-wrap: balance;
@@ -713,10 +721,11 @@
 
   .rail-wrap {
     position: absolute;
-    top: 50%;
+    inset-block: 0;
     right: 3%;
     z-index: 10;
-    translate: 0 -50%;
+    height: fit-content;
+    margin-block: auto;
     visibility: hidden;
     opacity: 0;
   }
@@ -815,11 +824,10 @@
   .reduced-motion .copy.problem,
   .reduced-motion .copy.tagline {
     position: relative;
-    top: auto;
-    left: auto;
+    inset: auto;
     width: auto;
+    height: auto;
     margin: 0 7% 28px;
-    translate: none;
     visibility: visible;
     opacity: 1;
     text-align: left;
@@ -872,16 +880,18 @@
     .stage { min-height: 600px; }
 
     .copy {
+      inset-block: auto;
       top: clamp(96px, 14svh, 130px);
+      margin-block: 0;
       left: 7%;
       width: 86%;
-      translate: none;
     }
 
     .copy.problem {
-      top: 50%;
-      left: 50%;
-      translate: -50% -50%;
+      inset-block: 0;
+      right: 0;
+      left: 0;
+      margin-block: auto;
     }
 
     .copy.feature-copy {

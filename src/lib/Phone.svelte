@@ -85,29 +85,28 @@
     color: var(--screen-ink);
   }
 
+  /* Punch-hole front camera, matching the Galaxy-style 3D model. */
   .island {
     position: absolute;
-    top: 13px;
+    top: 11px;
     left: 50%;
     translate: -50% 0;
-    width: 78px;
-    height: 23px;
-    border-radius: 12px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
     background: #040505;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    padding-right: 9px;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), inset 0 0 3px rgba(0, 0, 0, 0.9);
+    display: grid;
+    place-items: center;
     z-index: 3;
   }
 
   .lens-dot {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, #47545a, #0a0f11 60%);
-    box-shadow: 0 0 0 2px #161c1e;
+    box-shadow: 0 0 0 1px #161c1e;
   }
 
   .glass {
@@ -139,12 +138,13 @@
   }
 
   .camera-plate {
-    width: 104px;
-    height: 104px;
-    border-radius: 26px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 9px;
+    position: relative;
+    width: 92px;
+    height: 134px;
+    border-radius: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     padding: 11px;
     background: linear-gradient(145deg, #454b4d, #101314);
     box-shadow:
@@ -153,6 +153,9 @@
   }
 
   .lens {
+    width: 36px;
+    height: 36px;
+    flex: none;
     border-radius: 50%;
     background: radial-gradient(circle at 34% 28%, #7d8a90 0 7%, #293236 20%, #050809 56%, #121719 100%);
     box-shadow:
@@ -162,10 +165,11 @@
   }
 
   .flash {
-    width: 17px;
-    height: 17px;
-    align-self: center;
-    justify-self: center;
+    position: absolute;
+    top: 16px;
+    right: 14px;
+    width: 15px;
+    height: 15px;
     border-radius: 50%;
     background: radial-gradient(circle at 40% 35%, #fff8dc, #c9b98a 70%);
     box-shadow: 0 0 0 2px #2b3133;

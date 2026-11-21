@@ -2,6 +2,12 @@
 
 This template should help get you started developing with Svelte in Vite.
 
+## 3D phone asset
+
+The hero's 3D phone uses the [CC0 smartphone model](https://tevy.dev/models/smartphone) by tevy, LOD1 (279 KB). The KTX2 transcoder files in `public/basis/` come from three.js. Both are public domain or permissively licensed; no attribution is required.
+
+The four screen textures in `public/screens/` are pre-baked from `DemoScreens.svelte`, so the page never has to rasterise DOM at runtime. The CSS phone in `Phone.svelte` stays as the no-WebGL fallback.
+
 ## Recommended IDE Setup
 
 [VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).

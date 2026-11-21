@@ -8,11 +8,23 @@
 
   let scene, stage, problem, tagline, finalCopy, scrollHint;
   let phoneSlot, contactShadow, screenFade;
+  let phone3d = $state(null);
   let featureCopy = $state(null);
 
   let screen = $state(0);
   let step = $state(0);
   let reduced = $state(false);
+  let use3d = $state(true);
+  let threeReady = $state(false);
+  let Phone3DLazy = $state(null);
+  let layoutDesktop = $state(true);
+
+  const SCREEN_URLS = [
+    '/screens/assistant.webp',
+    '/screens/records.webp',
+    '/screens/scan.webp',
+    '/screens/medicines.webp'
+  ];
 
   const features = [
     { title: 'Ask in plain language.', body: 'Ask about symptoms or medicines. Answers come from MedlinePlus, FDA labels, and your own record. Warning signs get an instant response.', short: 'Ask' },
@@ -35,6 +47,12 @@
 
   const clamp = gsap.utils.clamp;
 
+  const phoneHeightPx = () => {
+    const css = getComputedStyle(document.documentElement);
+    const w = parseFloat(css.getPropertyValue('--phone-w')) || 280;
+    return (w * 19) / 9;
+  };
+
   function goToStep(i) {
     const st = ScrollTrigger.getById('scene');
     if (!st) return;
@@ -46,6 +64,10 @@
     gsap.registerPlugin(ScrollTrigger);
     const root = document.documentElement;
 
+    import('./Phone3D.svelte')
+      .then((module) => { Phone3DLazy = module.default; })
+      .catch(() => { use3d = false; });
+
     const applyPalette = (p) => {
       const idx = clamp(0, 2, Math.floor(p));
       const f = clamp(0, 1, p - idx);
@@ -53,6 +75,7 @@
     };
 
     const build = (isDesktop) => {
+      layoutDesktop = isDesktop;
       const pose = {
         xVw: isDesktop ? -0.6 : 0,
         yVh: isDesktop ? 0 : 1.1,
@@ -151,25 +174,32 @@
         wobble.target *= 0.88;
         const roll = pose.roll + wobble.v;
 
-        gsap.set(phoneSlot, {
-          x: pose.xVw * window.innerWidth,
-          y: pose.yVh * window.innerHeight + idle.y,
-          z: pose.z,
-          rotationY: yaw,
-          rotationX: pitch,
-          rotationZ: roll,
-          scale: pose.scale
-        });
+        if (use3d && threeReady && phone3d) {
+          phone3d.setPose({ ...pose, yaw, pitch, roll });
+        } else if (phoneSlot) {
+          gsap.set(phoneSlot, {
+            x: pose.xVw * window.innerWidth,
+            y: pose.yVh * window.innerHeight + idle.y,
+            z: pose.z,
+            rotationY: yaw,
+            rotationX: pitch,
+            rotationZ: roll,
+            scale: pose.scale
+          });
+        }
 
         if (pose.palette !== lastPalette) {
           applyPalette(pose.palette);
           lastPalette = pose.palette;
         }
 
-        const sceneKey = `${pose.persp}|${pose.originX}|${pose.glowX}|${pose.glowY}|${pose.glowAlpha}`;
+        const threeActive = use3d && threeReady;
+        const sceneKey = `${threeActive}|${pose.persp}|${pose.originX}|${pose.glowX}|${pose.glowY}|${pose.glowAlpha}`;
         if (sceneKey !== lastScene) {
-          stage.style.perspective = `${pose.persp}px`;
-          stage.style.perspectiveOrigin = `${pose.originX}% ${pose.originY}%`;
+          if (!threeActive) {
+            stage.style.perspective = `${pose.persp}px`;
+            stage.style.perspectiveOrigin = `${pose.originX}% ${pose.originY}%`;
+          }
           root.style.setProperty('--glow-x', `${pose.glowX}%`);
           root.style.setProperty('--glow-y', `${pose.glowY}%`);
           root.style.setProperty('--glow-alpha', pose.glowAlpha);
@@ -301,7 +331,24 @@
 
     <div class="contact-shadow" bind:this={contactShadow}></div>
 
-    <div class="phone-slot" bind:this={phoneSlot}>
+    {#if use3d && !reduced && Phone3DLazy}
+      <Phone3DLazy
+        bind:this={phone3d}
+        screens={SCREEN_URLS}
+        phoneHeight={phoneHeightPx()}
+        baseTop={layoutDesktop ? 0.52 : 0.57}
+        onready={() => (threeReady = true)}
+        onfail={() => { use3d = false; threeReady = false; }}
+      />
+    {/if}
+
+    <div
+      class="phone-placeholder"
+      class:show={use3d && !reduced && !!Phone3DLazy && !threeReady}
+      aria-hidden="true"
+    ></div>
+
+    <div class="phone-slot" class:css-fallback={!use3d || reduced || !Phone3DLazy} bind:this={phoneSlot}>
       <Phone>
         <div class="screen-fade" bind:this={screenFade}>
           <DemoScreens index={screen} />
@@ -433,7 +480,28 @@
     transform: translate3d(-60vw, 0, -120px) rotateX(8deg) rotateY(-28deg) rotateZ(-6deg) scale(0.86);
     z-index: 6;
     pointer-events: none;
+    display: none;
   }
+  .phone-slot.css-fallback { display: block; }
+
+  /* Shown only while the 3D model loads, so the old mockup never flashes back. */
+  .phone-placeholder {
+    position: absolute;
+    left: 50%;
+    top: 52%;
+    width: var(--phone-w);
+    height: calc(var(--phone-w) * 19 / 9);
+    margin-left: calc(var(--phone-w) / -2);
+    margin-top: calc(var(--phone-w) * 19 / 9 / -2);
+    border-radius: var(--phone-radius);
+    background: linear-gradient(150deg, #2a3032, #0b0d0e 60%, #181c1e);
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.09), 0 30px 70px rgba(0, 0, 0, 0.4);
+    z-index: 6;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .phone-placeholder.show { opacity: 1; visibility: visible; }
 
   .screen-fade { width: 100%; height: 100%; }
 
@@ -489,6 +557,7 @@
       top: 57%;
       transform: translate3d(0, 110vh, 0) rotateX(6deg) rotateY(-14deg) rotateZ(-3deg) scale(0.9);
     }
+    .phone-placeholder { top: 57%; }
     .contact-shadow { top: calc(57% + 220px); width: 200px; margin-left: -100px; }
     .static-features { left: 7%; right: 7%; top: 6%; translate: none; width: auto; }
   }

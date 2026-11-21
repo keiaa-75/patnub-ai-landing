@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { gsap } from 'gsap';
   import { ScrollTrigger } from 'gsap/ScrollTrigger';
   import Phone from './Phone.svelte';
@@ -18,6 +18,13 @@
       5  Feature 4
 
     BEATS is the index of the last beat. Download and About extend it later.
+
+    Motion model:
+      - The scroll-scrubbed timeline drives only the phone (its spin and
+        slides) and the backdrop reveals.
+      - Everything else (text, screen changes, the phone's small nudge) is
+        time-based Material Expressive spring motion, triggered when the
+        timeline passes a point. See syncStory().
   */
   const BEATS = 5;
   const FIRST_FEATURE_BEAT = 2;
@@ -181,7 +188,6 @@
       window.addEventListener('resize', measure, { passive: true });
 
       gsap.set([tagline, featureCopy].filter(Boolean), { autoAlpha: 0 });
-      gsap.set([tagline, featureCopy].filter(Boolean), { y: 24 });
       gsap.set(problem, { autoAlpha: 1, y: 0 });
       if (scrollHint) gsap.set(scrollHint, { autoAlpha: 1 });
 
@@ -239,17 +245,6 @@
       });
 
       /* Beat 0 -> 1: the phone arrives and carries the teal in with it. */
-      timeline.to(problem, {
-        autoAlpha: 0,
-        y: -28,
-        duration: D(0.3),
-        ease: 'power2.in'
-      }, T(0));
-
-      if (scrollHint) {
-        timeline.to(scrollHint, { autoAlpha: 0, duration: D(0.15) }, T(0));
-      }
-
       timeline.to(pose, {
         xVw: restX,
         yaw: 0,
@@ -266,21 +261,7 @@
         ease: 'power2.inOut'
       }, T(0, 0.2));
 
-      timeline.to(tagline, {
-        autoAlpha: 1,
-        y: 0,
-        duration: D(0.15),
-        ease: 'power2.out'
-      }, T(0, 0.85));
-
-      /* Beat 1 -> 2: spin right to left, white takes over, copy lands on the right. */
-      timeline.to(tagline, {
-        autoAlpha: 0,
-        y: -24,
-        duration: D(0.25),
-        ease: 'power2.in'
-      }, T(1));
-
+      /* Beat 1 -> 2: spin right to left, and the white takes over. */
       timeline.to(pose, {
         xVw: featureX,
         yaw: -360,
@@ -294,43 +275,163 @@
         ease: 'power2.inOut'
       }, T(1, 0.15));
 
-      timeline.to(featureCopy, {
-        autoAlpha: 1,
-        y: 0,
-        duration: D(0.15),
-        ease: 'power2.out'
-      }, T(1, 0.85));
-
-      /* Beats 2 -> 5: no spin. The screen changes and the copy swaps mid-way. */
-      for (let i = 1; i < features.length; i += 1) {
-        const beat = FIRST_FEATURE_BEAT + i - 1;
-
-        // Linear, so the screen index rounds over at exactly half-way (0.5).
-        timeline.to(pose, {
-          screenF: i,
-          duration: D(0.7),
-          ease: 'none'
-        }, T(beat, 0.15));
-
-        timeline.to(featureCopy, {
-          autoAlpha: 0,
-          y: -14,
-          duration: D(0.2),
-          ease: 'power2.in'
-        }, T(beat, 0.25));
-
-        timeline.set(featureCopy, { y: 18 }, T(beat, 0.5));
-
-        timeline.to(featureCopy, {
-          autoAlpha: 1,
-          y: 0,
-          duration: D(0.2),
-          ease: 'power2.out'
-        }, T(beat, 0.55));
-      }
-
       // Pin the timeline length to exactly 1 so beats land on k / BEATS.
       timeline.set({}, { x: 0 }, 1);
+
+      /*
+        Triggered motion. Each block of text is shown or hidden when the
+        scrubbed timeline passes a point, then plays as a spring.
+          spatial: movement (overshoots a little, then settles)
+          effects: opacity (never overshoots)
+      */
+      const gates = { problem: true, hint: true, tagline: false, feature: false };
+      const nudge = { s: 0, p: 0 };
+      let featureIndex = 0;
+
+      const partsOf = (block) => (block ? gsap.utils.toArray(block.children) : []);
+
+      const playIn = (parts, dir = 1) => {
+        gsap.killTweensOf(parts);
+        gsap.set(parts, { autoAlpha: 0, y: 28 * dir });
+        gsap.to(parts, { autoAlpha: 1, duration: 0.45, ease: effects, stagger: 0.07 });
+        gsap.to(parts, { y: 0, duration: 0.9, ease: spatial, stagger: 0.07 });
+      };
+
+      const showBlock = (block) => {
+        gsap.set(block, { autoAlpha: 1 });
+        playIn(partsOf(block));
+      };
+
+      const hideBlock = (block, name) => {
+        const parts = partsOf(block);
+
+        gsap.killTweensOf(parts);
+
+        gsap.to(parts, {
+          autoAlpha: 0,
+          y: -18,
+          duration: 0.25,
+          ease: effects,
+          stagger: 0.03,
+          onComplete: () => {
+            if (!gates[name]) gsap.set(block, { autoAlpha: 0 });
+          }
+        });
+      };
+
+      const setProblem = (show) => {
+        gsap.killTweensOf(problem);
+
+        if (show) {
+          gsap.to(problem, { autoAlpha: 1, duration: 0.4, ease: effects });
+          gsap.to(problem, { y: 0, duration: 0.9, ease: spatial });
+        } else {
+          gsap.to(problem, { autoAlpha: 0, y: -28, duration: 0.3, ease: effects });
+        }
+      };
+
+      const setHint = (show) => {
+        if (scrollHint) {
+          gsap.to(scrollHint, {
+            autoAlpha: show ? 1 : 0,
+            duration: 0.3,
+            ease: effects,
+            overwrite: 'auto'
+          });
+        }
+      };
+
+      // Old copy leaves, the text swaps while it is invisible, new copy springs in.
+      const swapFeature = (index, dir) => {
+        const parts = partsOf(featureCopy);
+
+        gsap.killTweensOf(parts);
+
+        gsap.to(parts, {
+          autoAlpha: 0,
+          y: -16 * dir,
+          duration: 0.2,
+          ease: effects,
+          stagger: 0.02,
+          onComplete: async () => {
+            step = index;
+            await tick();
+
+            if (gates.feature && featureIndex === index) playIn(parts, dir);
+          }
+        });
+      };
+
+      const changeFeature = (index, dir) => {
+        featureIndex = index;
+
+        // Cross-fade the screen texture, and give the phone a small spring nudge.
+        gsap.to(pose, { screenF: index, duration: 0.7, ease: effects, overwrite: 'auto' });
+
+        gsap.fromTo(
+          nudge,
+          { s: 0.03, p: -2.5 },
+          { s: 0, p: 0, duration: 0.9, ease: spatial, overwrite: true }
+        );
+
+        if (gates.feature) swapFeature(index, dir);
+        else step = index;
+      };
+
+      // A small margin stops a block flickering when scroll hovers on its edge.
+      const inWindow = (name, b, lo, hi) => {
+        const margin = gates[name] ? 0.05 : 0;
+        return b >= lo - margin && b <= hi + margin;
+      };
+
+      // b is the scrubbed timeline position in beats, so text follows the
+      // phone and the reveals rather than the raw scroll position.
+      const syncStory = () => {
+        const b = timeline.progress() * BEATS;
+
+        const problemOn = inWindow('problem', b, -1, 0.15);
+
+        if (problemOn !== gates.problem) {
+          gates.problem = problemOn;
+          setProblem(problemOn);
+        }
+
+        const hintOn = inWindow('hint', b, -1, 0.08);
+
+        if (hintOn !== gates.hint) {
+          gates.hint = hintOn;
+          setHint(hintOn);
+        }
+
+        // Appears as the teal finishes covering the screen.
+        const taglineOn = inWindow('tagline', b, 0.85, 1.25);
+
+        if (taglineOn !== gates.tagline) {
+          gates.tagline = taglineOn;
+          if (taglineOn) showBlock(tagline);
+          else hideBlock(tagline, 'tagline');
+        }
+
+        // Appears as the white finishes covering the screen.
+        const featureOn = inWindow('feature', b, 1.85, Infinity);
+
+        if (featureOn !== gates.feature) {
+          gates.feature = featureOn;
+
+          if (featureOn) {
+            step = featureIndex;
+            showBlock(featureCopy);
+          } else {
+            hideBlock(featureCopy, 'feature');
+          }
+        }
+
+        const index = clamp(0, features.length - 1, Math.round(b) - FIRST_FEATURE_BEAT);
+
+        if (index !== featureIndex) {
+          changeFeature(index, index > featureIndex ? 1 : -1);
+        }
+      };
 
       const clipFor = (amount) => {
         if (amount <= 0.001) return 'circle(0px at 50% 50%)';
@@ -348,8 +449,11 @@
       const render = () => {
         if (!active) return;
 
+        syncStory();
+
         const yaw = pose.yaw + idle.yaw + pointer.y;
-        const pitch = pose.pitch + pointer.x;
+        const pitch = pose.pitch + pointer.x + nudge.p;
+        const scale = pose.scale + nudge.s;
 
         wobble.value += (wobble.target - wobble.value) * 0.085;
         wobble.target *= 0.88;
@@ -357,7 +461,7 @@
         const roll = pose.roll + wobble.value;
 
         if (use3d && threeReady && phone3d) {
-          phone3d.setPose({ ...pose, yaw, pitch, roll });
+          phone3d.setPose({ ...pose, yaw, pitch, roll, scale });
         } else if (phoneSlot) {
           gsap.set(phoneSlot, {
             x: pose.xVw * size.w,
@@ -366,7 +470,7 @@
             rotationY: yaw,
             rotationX: pitch,
             rotationZ: roll,
-            scale: pose.scale
+            scale
           });
         }
 
@@ -396,7 +500,7 @@
 
           gsap.set(contactShadow, {
             x: size.w * (0.5 + pose.xVw),
-            y: size.h * (0.5 + pose.yVh) + deviceHeight * pose.scale * 0.5 + 6,
+            y: size.h * (0.5 + pose.yVh) + deviceHeight * scale * 0.5 + 6,
             xPercent: -50,
             scaleX: 0.72 + 0.28 * edge,
             opacity: 0.1 + 0.08 * edge
@@ -411,7 +515,6 @@
         const nextScreen = clamp(0, features.length - 1, Math.round(pose.screenF));
 
         if (nextScreen !== screen) screen = nextScreen;
-        if (nextScreen !== step) step = nextScreen;
       };
 
       const tiltPitch = gsap.quickTo(pointer, 'x', { duration: 0.65, ease: 'power2.out' });
@@ -449,8 +552,12 @@
 
       return () => {
         cancelled = true;
-        gsap.killTweensOf(headline);
-        gsap.set(headline, { clearProps: 'opacity,transform' });
+
+        const blocks = [problem, scrollHint, tagline, featureCopy].filter(Boolean);
+        const parts = [...partsOf(tagline), ...partsOf(featureCopy)];
+
+        gsap.killTweensOf([headline, ...blocks, ...parts, pose, nudge]);
+        gsap.set([headline, ...blocks, ...parts], { clearProps: 'all' });
         stage.removeEventListener('pointermove', onPointer);
         window.removeEventListener('resize', measure);
         observer.disconnect();

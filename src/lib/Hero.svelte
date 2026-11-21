@@ -4,7 +4,7 @@
   import { ScrollTrigger } from 'gsap/ScrollTrigger';
   import Phone from './Phone.svelte';
   import DemoScreens from './DemoScreens.svelte';
-  import StepRail from './StepRail.svelte';
+  import Shapes from './Shapes.svelte';
 
   /*
     The story is a row of full-viewport "beats". Scrolling rests on each one:
@@ -34,7 +34,7 @@
   let problem;
   let tagline;
   let featureCopy = $state(null);
-  let railWrap = $state(null);
+  let shapes = $state(null);
   let scrollHint;
   let phoneSlot;
   let contactShadow;
@@ -67,23 +67,19 @@
   const features = [
     {
       title: 'Ask in plain language.',
-      body: 'Ask about symptoms or medicines. Get clear explanations grounded in trusted health references and your own saved record.',
-      short: 'Assistant'
+      body: 'Ask about symptoms or medicines. Get clear explanations grounded in trusted health references and your own saved record.'
     },
     {
       title: 'Keep your doctor’s note.',
-      body: 'Save clinician-approved instructions on your device, so the details are easier to revisit when you need them.',
-      short: 'Records'
+      body: 'Save clinician-approved instructions on your device, so the details are easier to revisit when you need them.'
     },
     {
       title: 'Save a note with a scan.',
-      body: 'Use a secure QR code from your clinic to add approved instructions to your personal records.',
-      short: 'Scan'
+      body: 'Use a secure QR code from your clinic to add approved instructions to your personal records.'
     },
     {
       title: 'Understand your medicines.',
-      body: 'Find plain-language information from reviewed references, without losing sight of your clinician’s advice.',
-      short: 'Medicines'
+      body: 'Find plain-language information from reviewed references, without losing sight of your clinician’s advice.'
     }
   ];
 
@@ -91,16 +87,6 @@
 
   function updateDeviceHeight() {
     deviceHeight = getDeviceHeight();
-  }
-
-  function goToStep(index) {
-    const trigger = ScrollTrigger.getById('patnub-story');
-    if (!trigger) return;
-
-    window.scrollTo({
-      top: trigger.start + (trigger.end - trigger.start) * T(FIRST_FEATURE_BEAT + index),
-      behavior: 'smooth'
-    });
   }
 
   onMount(() => {
@@ -147,6 +133,7 @@
       const size = { w: 0, h: 0 };
 
       let active = true;
+      let lastBeat = 0;
       let lastClipTeal = '';
       let lastClipWhite = '';
 
@@ -158,7 +145,7 @@
       measure();
       window.addEventListener('resize', measure, { passive: true });
 
-      gsap.set([tagline, featureCopy, railWrap].filter(Boolean), { autoAlpha: 0 });
+      gsap.set([tagline, featureCopy].filter(Boolean), { autoAlpha: 0 });
       gsap.set([tagline, featureCopy].filter(Boolean), { y: 24 });
       gsap.set(problem, { autoAlpha: 1, y: 0 });
       if (scrollHint) gsap.set(scrollHint, { autoAlpha: 1 });
@@ -187,6 +174,16 @@
 
           onUpdate: (self) => {
             wobble.target = clamp(-5, 5, self.getVelocity() / 420);
+
+            shapes?.setProgress(self.progress);
+
+            // Shapes react to the beat we are closest to.
+            const beat = Math.round(self.progress * BEATS);
+
+            if (beat !== lastBeat) {
+              lastBeat = beat;
+              shapes?.goTo(beat);
+            }
           }
         }
       });
@@ -247,7 +244,7 @@
         ease: 'power2.inOut'
       }, T(1, 0.15));
 
-      timeline.to([featureCopy, railWrap].filter(Boolean), {
+      timeline.to(featureCopy, {
         autoAlpha: 1,
         y: 0,
         duration: D(0.15),
@@ -457,6 +454,10 @@
       <div class="bg bg-white" bind:this={bgWhite}></div>
     </div>
 
+    {#if !reduced}
+      <Shapes bind:this={shapes} beats={BEATS} />
+    {/if}
+
     <div class="copy problem scheme-peach" bind:this={problem}>
       <h1>Do you ever wish understanding your health was easier?</h1>
     </div>
@@ -520,16 +521,6 @@
         </div>
       </Phone>
     </div>
-
-    {#if !reduced}
-      <div class="rail-wrap scheme-white" bind:this={railWrap}>
-        <StepRail
-          steps={features.map((feature) => feature.short)}
-          active={step}
-          onselect={goToStep}
-        />
-      </div>
-    {/if}
 
     <div class="scroll-hint scheme-peach" bind:this={scrollHint}>
       <span class="hint-line"></span>
@@ -645,9 +636,9 @@
   }
 
   .feature-copy {
-    right: 14%;
+    right: 10%;
     left: auto;
-    width: min(32%, 460px);
+    width: min(34%, 480px);
   }
 
   h1,
@@ -717,17 +708,6 @@
     filter: blur(18px);
     opacity: 0;
     pointer-events: none;
-  }
-
-  .rail-wrap {
-    position: absolute;
-    inset-block: 0;
-    right: 3%;
-    z-index: 10;
-    height: fit-content;
-    margin-block: auto;
-    visibility: hidden;
-    opacity: 0;
   }
 
   .scroll-hint {
@@ -865,11 +845,9 @@
     }
 
     .feature-copy {
-      right: 12%;
-      width: 34%;
+      right: 8%;
+      width: 38%;
     }
-
-    .rail-wrap { right: 2%; }
 
     h1,
     h2 { font-size: clamp(2.4rem, 4.5vw, 4rem); }
@@ -914,8 +892,6 @@
       font-size: 13px;
       line-height: 1.55;
     }
-
-    .rail-wrap { display: none; }
 
     .scroll-hint {
       bottom: 17px;

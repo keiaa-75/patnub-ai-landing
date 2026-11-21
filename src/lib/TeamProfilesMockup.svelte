@@ -4,28 +4,28 @@
       name: 'Marlon Isaguirre',
       role: 'Project Lead',
       initials: 'MI',
-      avatar: 'https://avatars.githubusercontent.com/u/220807597?v=4',
+      username: 'SussyMarlony',
       color: 'mint'
     },
     {
       name: 'Julian Macato',
       role: 'Full-Stack Developer',
       initials: 'JM',
-      avatar: 'https://avatars.githubusercontent.com/u/53817791?v=4',
+      username: 'fancybaby404',
       color: 'peach'
     },
     {
       name: 'Ravin Aguelo',
       role: 'Runtime Engineer',
       initials: 'RA',
-      avatar: 'https://avatars.githubusercontent.com/u/220807681?v=4',
+      username: 'RavinEduard',
       color: 'blue'
     },
     {
       name: 'Jill Abarte',
       role: 'Backend Developer',
       initials: 'JA',
-      avatar: 'https://avatars.githubusercontent.com/u/176262249?v=4',
+      username: 'keiaa-75',
       color: 'lavender'
     }
   ];
@@ -34,13 +34,19 @@
 <div class="mockup">
   <div class="landscape">
     <div class="team-grid">
-      {#each team as member (member.initials)}
+      {#each team as member}
         <article class="profile-card">
-          <div class="portrait" class:mint={member.color === 'mint'} class:peach={member.color === 'peach'} class:blue={member.color === 'blue'} class:lavender={member.color === 'lavender'}>
+          <div
+            class="portrait"
+            class:mint={member.color === 'mint'}
+            class:peach={member.color === 'peach'}
+            class:blue={member.color === 'blue'}
+            class:lavender={member.color === 'lavender'}
+          >
             <span class="initials">{member.initials}</span>
 
             <img
-              src={member.avatar}
+              src={`https://github.com/${member.username}.png?size=256`}
               alt=""
               crossorigin="anonymous"
               referrerpolicy="no-referrer"
@@ -63,18 +69,22 @@
 <style>
   .mockup {
     position: relative;
+
     width: 100%;
     height: 100%;
+
     overflow: hidden;
+
     background: #f5faf8;
+
     font-family: 'Roboto', Arial, sans-serif;
   }
 
   /*
-    The screen itself is portrait-oriented.
+    The inner screen uses landscape dimensions.
 
-    This landscape container rotates in the opposite
-    direction to the physical phone.
+    It rotates in the opposite direction to the physical
+    phone so its profile cards remain upright.
   */
 
   .landscape {
@@ -90,13 +100,13 @@
 
     padding: 4.5% 4%;
 
+    background: #f5faf8;
+
     transform:
       translate(-50%, -50%)
       rotate(-90deg);
 
     transform-origin: center;
-
-    background: #f5faf8;
   }
 
   .team-grid {
@@ -137,7 +147,8 @@
 
     flex: none;
 
-    width: 37%;
+    width: clamp(36px, 25%, 82px);
+
     aspect-ratio: 1;
 
     overflow: hidden;
@@ -148,7 +159,10 @@
     margin-bottom: 9%;
 
     border: 3px solid rgba(255, 255, 255, 0.85);
-    border-radius: 42% 58% 54% 46% / 50% 43% 57% 50%;
+
+    border-radius:
+      42% 58% 54% 46% /
+      50% 43% 57% 50%;
 
     box-shadow:
       0 3px 10px rgba(27, 58, 49, 0.1);
@@ -160,19 +174,16 @@
 
   .portrait.peach {
     background: #f8e5d1;
-
     border-radius: 50% 50% 43% 57%;
   }
 
   .portrait.blue {
     background: #e0eafa;
-
     border-radius: 44% 56% 55% 45%;
   }
 
   .portrait.lavender {
     background: #eee0f1;
-
     border-radius: 55% 45% 43% 57%;
   }
 
@@ -212,7 +223,6 @@
     line-height: 1.3;
 
     text-wrap: balance;
-
     overflow-wrap: anywhere;
   }
 

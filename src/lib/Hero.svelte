@@ -1,14 +1,32 @@
 <script>
   import { onMount, tick } from 'svelte';
+
   import { gsap } from 'gsap';
   import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
   import Phone from './Phone.svelte';
   import DemoScreens from './DemoScreens.svelte';
   import TeamProfilesMockup from './TeamProfilesMockup.svelte';
+  import FloatingControls from './FloatingControls.svelte';
   import Shapes from './Shapes.svelte';
 
   import { spatial, effects } from './motion.js';
+  import { createSoundEngine } from './sound.js';
+
+  /*
+    Story beats:
+
+      0  Opening question
+      1  Hero
+      2  Feature 1
+      3  Feature 2
+      4  Feature 3
+      5  Feature 4
+      6  Download and team showcase
+
+    The final beat settles before the end of its scroll interval.
+    There is no separate About section.
+  */
 
   const BEATS = 6;
   const FIRST_FEATURE_BEAT = 2;
@@ -23,6 +41,14 @@
 
   const NO_SHAPES = FLAGS.has('noshapes');
   const NO_3D = FLAGS.has('no3d');
+
+  const SOUND_STORAGE_KEY = 'patnub-ai-sound';
+
+  const T = (beat, fraction = 0) =>
+    (beat + fraction) / BEATS;
+
+  const D = (fraction) =>
+    fraction / BEATS;
 
   const settle = (fn) =>
     requestAnimationFrame(() =>
@@ -42,12 +68,6 @@
       new Promise((resolve) => setTimeout(resolve, timeout))
     ]);
   };
-
-  const T = (beat, fraction = 0) =>
-    (beat + fraction) / BEATS;
-
-  const D = (fraction) =>
-    fraction / BEATS;
 
   let scene;
   let stage;
@@ -77,20 +97,57 @@
   let use3d = $state(!NO_3D);
   let threeReady = $state(false);
 
-  const getDeviceHeight = () =>
-    typeof window === 'undefined'
-      ? 420
-      : window.innerWidth < 768
-        ? Math.min(window.innerHeight * 0.44, 320)
-        : Math.min(window.innerHeight * 0.76, 700);
+  let motionPaused = $state(false);
+  let soundEnabled = $state(false);
+
+  let soundEngine;
+  let soundUnlockHandler = null;
+
+  const clamp = gsap.utils.clamp;
+
+  /*
+    Phone dimensions.
+
+    On desktop, the device is limited by the viewport width
+    and height. On mobile, it uses a smaller proportion to
+    leave room for the download heading and button.
+  */
+
+  const getDeviceHeight = () => {
+    if (typeof window === 'undefined') {
+      return 420;
+    }
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    if (width < 768) {
+      return Math.min(
+        height * 0.42,
+        width * 0.82,
+        300
+      );
+    }
+
+    return Math.min(
+      height * 0.72,
+      width * 0.78,
+      680
+    );
+  };
 
   let deviceHeight = $state(getDeviceHeight());
 
   /*
-    The final entry is a special marker.
+    Application screen order:
 
-    Phone3D creates its texture dynamically using the
-    GitHub profile photos, names, and project roles.
+      0 Assistant
+      1 Records
+      2 Scan
+      3 Medicines
+      4 Team profiles
+
+    The final entry is generated locally in Phone3D.svelte.
   */
 
   const SCREEN_URLS = [
@@ -120,8 +177,6 @@
     }
   ];
 
-  const clamp = gsap.utils.clamp;
-
   function updateDeviceHeight() {
     deviceHeight = getDeviceHeight();
   }
@@ -129,7 +184,157 @@
   const startShapes = () =>
     settle(() => shapes?.enter());
 
+  /*
+    Audio preference storage.
+  */
+
+  function saveSoundPreference(enabled) {
+    try {
+      localStorage.setItem(
+        SOUND_STORAGE_KEY,
+        enabled ? 'enabled' : 'disabled'
+      );
+    } catch {
+      // The current session still works without storage.
+    }
+  }
+
+  function removeSoundUnlockListeners() {
+    if (
+      !soundUnlockHandler ||
+      typeof window === 'undefined'
+    ) {
+      return;
+    }
+
+    window.removeEventListener(
+      'pointerdown',
+      soundUnlockHandler
+    );
+
+    window.removeEventListener(
+      'keydown',
+      soundUnlockHandler
+    );
+
+    soundUnlockHandler = null;
+  }
+
+  function registerSoundUnlockListeners() {
+    if (
+      typeof window === 'undefined' ||
+      soundUnlockHandler
+    ) {
+      return;
+    }
+
+    soundUnlockHandler = async () => {
+      const unlocked = await soundEngine?.unlock();
+
+      if (unlocked) {
+        removeSoundUnlockListeners();
+      }
+    };
+
+    window.addEventListener(
+      'pointerdown',
+      soundUnlockHandler,
+      { passive: true }
+    );
+
+    window.addEventListener(
+      'keydown',
+      soundUnlockHandler
+    );
+  }
+
+  /*
+    Sound control.
+
+    The AudioContext is started only after the visitor
+    explicitly enables sound.
+  */
+
+  async function toggleSound() {
+    if (soundEnabled) {
+      soundEnabled = false;
+
+      saveSoundPreference(false);
+
+      soundEngine?.disable();
+
+      removeSoundUnlockListeners();
+
+      return;
+    }
+
+    if (!soundEngine) return;
+
+    soundEnabled = true;
+
+    saveSoundPreference(true);
+
+    const available = await soundEngine.enable();
+
+    if (!available) {
+      soundEnabled = false;
+
+      saveSoundPreference(false);
+
+      return;
+    }
+
+    registerSoundUnlockListeners();
+  }
+
+  /*
+    Motion control.
+
+    Pausing the GSAP root timeline stops the scroll-driven
+    animation without disabling native scrolling.
+
+    On resume, ScrollTrigger synchronizes the animation
+    to the current scroll position.
+  */
+
+  function toggleMotion() {
+    motionPaused = !motionPaused;
+
+    gsap.globalTimeline.paused(motionPaused);
+
+    if (!motionPaused) {
+      requestAnimationFrame(() => {
+        gsap.globalTimeline.paused(false);
+
+        ScrollTrigger.update();
+      });
+    }
+  }
+
   onMount(() => {
+    /*
+      Initialize the sound engine.
+    */
+
+    soundEngine = createSoundEngine();
+
+    try {
+      soundEnabled =
+        localStorage.getItem(SOUND_STORAGE_KEY) === 'enabled';
+    } catch {
+      soundEnabled = false;
+    }
+
+    if (soundEnabled) {
+      soundEngine.enable();
+
+      registerSoundUnlockListeners();
+    }
+
+    /*
+      Initialize ScrollTrigger and viewport measurement.
+    */
+
     gsap.registerPlugin(ScrollTrigger);
 
     updateDeviceHeight();
@@ -140,18 +345,32 @@
       { passive: true }
     );
 
+    /*
+      Lazy-load the 3D device.
+    */
+
     import('./Phone3D.svelte')
       .then((module) => {
         Phone3DLazy = module.default;
       })
-      .catch(() => {
+      .catch((error) => {
+        console.warn(
+          '[patnub.ai] Could not load 3D phone:',
+          error
+        );
+
         use3d = false;
+
         startShapes();
       });
 
     if (!use3d) {
       startShapes();
     }
+
+    /*
+      Construct the story for a desktop or mobile layout.
+    */
 
     const buildStory = (isDesktop) => {
       reduced = false;
@@ -162,19 +381,17 @@
       const restScale = isDesktop ? 1 : 0.88;
 
       /*
-        The landscape phone is enlarged enough to make
-        the four profile cards readable.
-
-        Its vertical position is slightly above the
-        center of the final viewport.
+        The landscape phone sits slightly above
+        the vertical midpoint of the viewport.
       */
 
-      const landscapeScale = isDesktop ? 1.15 : 0.95;
-      const landscapeY = 0.04;
+      const landscapeScale = isDesktop ? 1.08 : 0.88;
+      const landscapeY = isDesktop ? -0.065 : -0.045;
 
       const pose = {
         xVw: isDesktop ? -0.66 : -0.72,
         yVh: isDesktop ? 0 : 0.17,
+
         z: -35,
 
         yaw: -450,
@@ -217,6 +434,8 @@
       let lastClipTeal = '';
       let lastClipWhite = '';
 
+      let cancelled = false;
+
       const measure = () => {
         size.w = stage.clientWidth;
         size.h = stage.clientHeight;
@@ -230,6 +449,10 @@
         { passive: true }
       );
 
+      /*
+        Initial visibility.
+      */
+
       gsap.set(
         [tagline, featureCopy, downloadCopy].filter(Boolean),
         { autoAlpha: 0 }
@@ -241,7 +464,9 @@
       });
 
       if (scrollHint) {
-        gsap.set(scrollHint, { autoAlpha: 1 });
+        gsap.set(scrollHint, {
+          autoAlpha: 1
+        });
       }
 
       screen = 0;
@@ -249,9 +474,13 @@
 
       const headline = problem.querySelector('h1');
 
-      let cancelled = false;
+      gsap.set(headline, {
+        y: 28
+      });
 
-      gsap.set(headline, { y: 28 });
+      /*
+        Avoid font swapping during the opening animation.
+      */
 
       whenFontsReady(1500).then(() => {
         if (cancelled) return;
@@ -268,6 +497,18 @@
           ease: spatial
         });
       });
+
+      /*
+        Main scroll-driven timeline.
+
+        The same timeline controls:
+
+        - Phone position
+        - Phone rotation
+        - Phone scale
+        - Background reveals
+        - App screen transitions
+      */
 
       const timeline = gsap.timeline({
         defaults: {
@@ -296,11 +537,43 @@
                 },
 
                 delay: 0.1,
+
                 ease: 'power2.inOut'
               }
             : undefined,
 
           onUpdate: (self) => {
+            if (motionPaused) return;
+
+            const currentBeat = Math.round(
+              self.progress * BEATS
+            );
+
+            /*
+              Expressive shape reactions and sound effects
+              occur only when a beat changes.
+            */
+
+            if (currentBeat !== lastBeat) {
+              const direction =
+                currentBeat > lastBeat ? 1 : -1;
+
+              lastBeat = currentBeat;
+
+              shapes?.goTo(currentBeat);
+
+              if (soundEnabled) {
+                if (
+                  currentBeat === DOWNLOAD_BEAT &&
+                  direction > 0
+                ) {
+                  soundEngine?.landing();
+                } else {
+                  soundEngine?.transition(direction);
+                }
+              }
+            }
+
             wobble.target = clamp(
               -5,
               5,
@@ -308,34 +581,30 @@
             );
 
             shapes?.setProgress(self.progress);
-
-            const beat = Math.round(
-              self.progress * BEATS
-            );
-
-            if (beat !== lastBeat) {
-              lastBeat = beat;
-              shapes?.goTo(beat);
-            }
           }
         }
       });
 
       /*
-        Beat 0 -> 1:
-        The phone arrives and brings in the teal background.
+        OPENING -> HERO
+
+        The phone enters from the left and brings
+        the teal background with it.
       */
 
       timeline.to(
         pose,
         {
           xVw: restX,
+
           yaw: 0,
           z: 0,
           roll: 0,
+
           scale: restScale,
 
           duration: D(0.9),
+
           ease: 'power2.out'
         },
         T(0, 0.1)
@@ -347,23 +616,28 @@
           reveal1: 1,
 
           duration: D(0.75),
+
           ease: 'power2.inOut'
         },
         T(0, 0.2)
       );
 
       /*
-        Beat 1 -> 2:
-        The phone moves from right to left.
+        HERO -> FIRST FEATURE
+
+        The device moves to the left and the white
+        background replaces teal.
       */
 
       timeline.to(
         pose,
         {
           xVw: featureX,
+
           yaw: -360,
 
           duration: D(0.9),
+
           ease: 'power2.inOut'
         },
         T(1, 0.05)
@@ -375,19 +649,65 @@
           reveal2: 1,
 
           duration: D(0.75),
+
           ease: 'power2.inOut'
         },
         T(1, 0.15)
       );
 
       /*
-        Beat 5 -> 6:
+        SCREEN TRANSITIONS
 
-        The phone travels toward the horizontal center,
-        moves upward slightly, and rotates into landscape.
+        The main timeline is the only owner of screenF.
 
-        The profile-screen texture is revealed toward
-        the end of the transition.
+        0 -> 1: Assistant to Records
+        1 -> 2: Records to Scan
+        2 -> 3: Scan to Medicines
+        3 -> 4: Medicines to Team profiles
+
+        This avoids the competing GSAP tweens that could
+        previously leave the Medicines screen displayed.
+      */
+
+      timeline.to(
+        pose,
+        {
+          screenF: 1,
+
+          duration: D(0.55)
+        },
+        T(2, 0.45)
+      );
+
+      timeline.to(
+        pose,
+        {
+          screenF: 2,
+
+          duration: D(0.55)
+        },
+        T(3, 0.45)
+      );
+
+      timeline.to(
+        pose,
+        {
+          screenF: 3,
+
+          duration: D(0.55)
+        },
+        T(4, 0.45)
+      );
+
+      /*
+        FINAL TRANSITION
+
+        The phone moves upward, centers itself, and rotates
+        into landscape orientation.
+
+        The phone and screen transitions both finish
+        by approximately beat 5.6, leaving a short
+        resting interval before the end of the scene.
       */
 
       timeline.to(
@@ -402,10 +722,11 @@
 
           scale: landscapeScale,
 
-          duration: D(0.95),
+          duration: D(0.6),
+
           ease: 'power2.inOut'
         },
-        T(5, 0.05)
+        T(5, 0)
       );
 
       timeline.to(
@@ -413,20 +734,22 @@
         {
           screenF: 4,
 
-          duration: D(0.45),
-          ease: 'none'
+          duration: D(0.42)
         },
-        T(5, 0.42)
+        T(5, 0.18)
       );
 
       /*
-        Pin the timeline to exactly 1.
+        Keep the total timeline exactly 1.
       */
 
       timeline.set({}, { x: 0 }, 1);
 
       /*
-        Time-based content animations.
+        TIME-BASED TEXT ANIMATIONS
+
+        These animations are separate from the
+        phone's scroll-driven timeline.
       */
 
       const gates = {
@@ -475,7 +798,10 @@
       const showBlock = (block) => {
         if (!block) return;
 
-        gsap.set(block, { autoAlpha: 1 });
+        gsap.set(block, {
+          autoAlpha: 1
+        });
+
         playIn(partsOf(block));
       };
 
@@ -491,13 +817,16 @@
           y: -18,
 
           duration: 0.25,
+
           ease: effects,
 
           stagger: 0.03,
 
           onComplete: () => {
             if (!gates[name]) {
-              gsap.set(block, { autoAlpha: 0 });
+              gsap.set(block, {
+                autoAlpha: 0
+              });
             }
           }
         });
@@ -542,8 +871,10 @@
       };
 
       /*
-        The feature text changes while invisible,
-        then springs into its new position.
+        Feature text transitions.
+
+        Screen transitions are deliberately not handled here.
+        Those are controlled entirely by the main timeline.
       */
 
       const swapFeature = (index, dir) => {
@@ -553,9 +884,11 @@
 
         gsap.to(parts, {
           autoAlpha: 0,
+
           y: -16 * dir,
 
           duration: 0.2,
+
           ease: effects,
 
           stagger: 0.02,
@@ -578,15 +911,6 @@
       const changeFeature = (index, dir) => {
         featureIndex = index;
 
-        gsap.to(pose, {
-          screenF: index,
-
-          duration: 0.7,
-          ease: effects,
-
-          overwrite: 'auto'
-        });
-
         gsap.fromTo(
           nudge,
 
@@ -600,6 +924,7 @@
             p: 0,
 
             duration: 0.9,
+
             ease: spatial,
 
             overwrite: true
@@ -614,8 +939,11 @@
       };
 
       /*
-        A small boundary margin prevents flickering
-        around snap positions.
+        Content visibility.
+
+        The opening headline disappears after the hero.
+        Feature content leaves before the final transition.
+        Download copy appears early enough to accompany the phone.
       */
 
       const inWindow = (name, beat, low, high) => {
@@ -630,6 +958,10 @@
       const syncStory = () => {
         const beat = timeline.progress() * BEATS;
 
+        /*
+          Opening question.
+        */
+
         const problemOn = inWindow(
           'problem',
           beat,
@@ -639,8 +971,13 @@
 
         if (problemOn !== gates.problem) {
           gates.problem = problemOn;
+
           setProblem(problemOn);
         }
+
+        /*
+          Scroll hint.
+        */
 
         const hintOn = inWindow(
           'hint',
@@ -651,6 +988,7 @@
 
         if (hintOn !== gates.hint) {
           gates.hint = hintOn;
+
           setHint(hintOn);
         }
 
@@ -683,7 +1021,7 @@
           'feature',
           beat,
           1.85,
-          5.3
+          5.1
         );
 
         if (featureOn !== gates.feature) {
@@ -691,6 +1029,7 @@
 
           if (featureOn) {
             step = featureIndex;
+
             showBlock(featureCopy);
           } else {
             hideBlock(featureCopy, 'feature');
@@ -698,16 +1037,16 @@
         }
 
         /*
-          Download section.
+          Download heading and action.
 
-          The headline and button appear while the
-          phone is approaching its landscape position.
+          The section starts entering while the phone
+          is still completing its final transition.
         */
 
         const downloadOn = inWindow(
           'download',
           beat,
-          5.55,
+          5.18,
           DOWNLOAD_BEAT + 1
         );
 
@@ -722,25 +1061,31 @@
         }
 
         /*
-          Active feature screen.
+          Update feature text only before the final transition.
+
+          The main timeline continues to control screenF,
+          including all reverse-scroll transitions.
         */
 
-        const index = clamp(
-          0,
-          features.length - 1,
-          Math.round(beat) - FIRST_FEATURE_BEAT
-        );
+        if (beat < 5.15) {
+          const index = clamp(
+            0,
+            features.length - 1,
 
-        if (index !== featureIndex) {
-          changeFeature(
-            index,
-            index > featureIndex ? 1 : -1
+            Math.round(beat) - FIRST_FEATURE_BEAT
           );
+
+          if (index !== featureIndex) {
+            changeFeature(
+              index,
+              index > featureIndex ? 1 : -1
+            );
+          }
         }
       };
 
       /*
-        Backdrop clipping.
+        Expanding backdrop clipping.
       */
 
       const clipFor = (amount) => {
@@ -761,10 +1106,13 @@
 
       /*
         Main render loop.
+
+        The same phone pose is applied to either the
+        actual Three.js model or the CSS fallback.
       */
 
       const render = () => {
-        if (!active) return;
+        if (!active || motionPaused) return;
 
         syncStory();
 
@@ -781,7 +1129,11 @@
 
         const roll = pose.roll + wobble.value;
 
-        if (use3d && threeReady && phone3d) {
+        if (
+          use3d &&
+          threeReady &&
+          phone3d
+        ) {
           phone3d.setPose({
             ...pose,
             yaw,
@@ -805,6 +1157,10 @@
           });
         }
 
+        /*
+          Backdrop reveals.
+        */
+
         const clipTeal = clipFor(pose.reveal1);
         const clipWhite = clipFor(pose.reveal2);
 
@@ -813,6 +1169,7 @@
           clipTeal !== lastClipTeal
         ) {
           bgTeal.style.clipPath = clipTeal;
+
           lastClipTeal = clipTeal;
         }
 
@@ -821,8 +1178,13 @@
           clipWhite !== lastClipWhite
         ) {
           bgWhite.style.clipPath = clipWhite;
+
           lastClipWhite = clipWhite;
         }
+
+        /*
+          Screen sheen for the CSS fallback.
+        */
 
         const radians = yaw * Math.PI / 180;
 
@@ -837,6 +1199,10 @@
             `${50 + Math.cos(radians) * 38}%`
           );
         }
+
+        /*
+          Contact shadow.
+        */
 
         if (contactShadow) {
           const edge = Math.abs(Math.cos(radians));
@@ -857,6 +1223,10 @@
           });
         }
 
+        /*
+          CSS fallback screen crossfade.
+        */
+
         if (screenFade) {
           const difference = Math.abs(
             pose.screenF - Math.round(pose.screenF)
@@ -866,9 +1236,16 @@
             1 - difference * 0.85;
         }
 
+        /*
+          Screen selection.
+
+          The final value must be 4.
+        */
+
         const nextScreen = clamp(
           0,
           SCREEN_URLS.length - 1,
+
           Math.round(pose.screenF)
         );
 
@@ -878,7 +1255,7 @@
       };
 
       /*
-        Pointer interaction.
+        Mouse movement produces a small expressive tilt.
       */
 
       const tiltPitch = gsap.quickTo(
@@ -900,7 +1277,12 @@
       );
 
       const onPointer = (event) => {
-        if (event.pointerType === 'touch') return;
+        if (
+          event.pointerType === 'touch' ||
+          motionPaused
+        ) {
+          return;
+        }
 
         const bounds = stage.getBoundingClientRect();
 
@@ -942,8 +1324,7 @@
       });
 
       /*
-        Pause rendering when the stage is outside
-        the viewport.
+        Stop rendering when the stage is outside the viewport.
       */
 
       const observer = new IntersectionObserver(
@@ -1014,7 +1395,10 @@
     };
 
     /*
-      Reduced-motion mode.
+      Reduced-motion version.
+
+      This shows all feature content and the final team screen
+      without requiring a scroll-driven animation.
     */
 
     const buildReducedMotion = () => {
@@ -1045,6 +1429,10 @@
       buildReducedMotion
     );
 
+    /*
+      Component cleanup.
+    */
+
     return () => {
       media.revert();
 
@@ -1052,6 +1440,10 @@
         'resize',
         updateDeviceHeight
       );
+
+      removeSoundUnlockListeners();
+
+      soundEngine?.dispose();
     };
   });
 </script>
@@ -1064,13 +1456,19 @@
   class:reduced-motion={reduced}
   aria-label="How patnub.ai helps you understand your health"
 >
-  <div class="stage" bind:this={stage}>
+  <div
+    class="stage"
+    bind:this={stage}
+    class:motion-paused={motionPaused}
+  >
+    <!-- Backdrops -->
     <div class="backdrop" aria-hidden="true">
       <div class="bg bg-peach"></div>
       <div class="bg bg-teal" bind:this={bgTeal}></div>
       <div class="bg bg-white" bind:this={bgWhite}></div>
     </div>
 
+    <!-- Decorative shapes -->
     {#if !reduced && !NO_SHAPES}
       <Shapes bind:this={shapes} beats={BEATS} />
     {/if}
@@ -1080,7 +1478,7 @@
       <h1>Do you ever wish understanding your health was easier?</h1>
     </div>
 
-    <!-- Hero tagline -->
+    <!-- Hero -->
     <div class="copy tagline scheme-teal" bind:this={tagline}>
       <h2>Your doctor’s note, in plain words.</h2>
 
@@ -1090,7 +1488,7 @@
       </p>
     </div>
 
-    <!-- Feature copy -->
+    <!-- Features -->
     {#if reduced}
       <div class="static-features scheme-white">
         {#each features as feature, i}
@@ -1107,11 +1505,14 @@
         bind:this={featureCopy}
       >
         <h2>{features[step].title}</h2>
-        <p class="sub">{features[step].body}</p>
+
+        <p class="sub">
+          {features[step].body}
+        </p>
       </div>
     {/if}
 
-    <!-- Download content -->
+    <!-- Download -->
     <div
       class="copy download-copy scheme-white"
       bind:this={downloadCopy}
@@ -1128,14 +1529,18 @@
         href="/downloads/patnub-ai.apk"
         download="patnub-ai.apk"
       >
-        <span class="material-symbols-rounded" aria-hidden="true">
+        <span
+          class="material-symbols-rounded"
+          aria-hidden="true"
+        >
           download
         </span>
+
         Download
       </a>
     </div>
 
-    <!-- Phone shadow -->
+    <!-- Contact shadow -->
     <div
       class="contact-shadow"
       bind:this={contactShadow}
@@ -1162,7 +1567,7 @@
       />
     {/if}
 
-    <!-- CSS device fallback -->
+    <!-- CSS fallback -->
     <div
       class="phone-slot"
       class:css-fallback={!use3d || reduced}
@@ -1181,7 +1586,7 @@
       </Phone>
     </div>
 
-    <!-- Scroll hint -->
+    <!-- Scroll prompt -->
     <div
       class="scroll-hint scheme-peach"
       bind:this={scrollHint}
@@ -1193,9 +1598,22 @@
   </div>
 </section>
 
+<!-- Floating controls stay outside the clipped scroll stage. -->
+<FloatingControls
+  motionPaused={motionPaused}
+  soundEnabled={soundEnabled}
+  onToggleMotion={toggleMotion}
+  onToggleSound={toggleSound}
+/>
+
 <style>
+  /*
+    Six scroll intervals create seven viewport positions.
+  */
+
   .scene {
     position: relative;
+
     height: calc((var(--beats) + 1) * 100svh);
   }
 
@@ -1203,8 +1621,8 @@
     position: sticky;
     top: 0;
 
+    width: 100%;
     height: 100svh;
-    min-height: 620px;
 
     overflow: hidden;
 
@@ -1212,6 +1630,18 @@
     perspective-origin: 50% 50%;
 
     isolation: isolate;
+  }
+
+  /*
+    Pause CSS animations and transitions when the visitor
+    uses the motion control.
+
+    GSAP is paused separately in the script.
+  */
+
+  .stage.motion-paused :global(*) {
+    animation-play-state: paused !important;
+    transition: none !important;
   }
 
   /* Color schemes */
@@ -1239,12 +1669,14 @@
     --stage-soft: #dff3ed;
   }
 
-  /* Backdrops */
+  /* Background layers */
 
   .backdrop {
     position: absolute;
     inset: 0;
+
     z-index: 0;
+
     pointer-events: none;
   }
 
@@ -1273,6 +1705,7 @@
     position: absolute;
 
     inset-block: 0;
+
     height: fit-content;
 
     margin-block: auto;
@@ -1293,11 +1726,27 @@
     opacity: 0;
   }
 
+  /*
+    Opening headline is deliberately positioned higher
+    than the viewport midpoint.
+
+    Space remains reserved underneath for the scroll prompt.
+  */
+
   .problem {
+    inset-block:
+      clamp(55px, 9svh, 92px)
+      clamp(90px, 15svh, 150px);
+
     right: 0;
     left: 0;
 
     width: min(88%, 1180px);
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
 
     margin-inline: auto;
 
@@ -1306,10 +1755,14 @@
 
   .problem h1 {
     max-width: 15ch;
+
     margin: 0 auto;
 
-    font-size: clamp(3rem, 7.2vw, 7.4rem);
+    font-size: clamp(2.8rem, 7.2vw, 7.2rem);
+
     line-height: 0.98;
+
+    text-wrap: balance;
 
     opacity: 0;
   }
@@ -1332,6 +1785,7 @@
     font-size: clamp(2.6rem, 4.6vw, 4.6rem);
 
     font-weight: 600;
+
     letter-spacing: -0.04em;
     line-height: 0.99;
 
@@ -1340,25 +1794,27 @@
 
   .sub {
     max-width: 39ch;
+
     margin: 0;
 
     color: var(--stage-muted);
 
     font-size: clamp(1rem, 1.25vw, 1.15rem);
+
     line-height: 1.65;
   }
 
-  /* Download section */
+  /* Final download area */
 
   .download-copy {
     inset-block: auto;
 
-    top: clamp(25px, 5vh, 52px);
+    top: clamp(22px, 3.5svh, 42px);
 
     right: 0;
     left: 0;
 
-    width: min(88%, 760px);
+    width: min(90%, 760px);
 
     height: auto;
 
@@ -1369,33 +1825,41 @@
 
   .download-copy h2 {
     max-width: 100%;
-    margin: 0 0 9px;
 
-    font-size: clamp(2rem, 4vw, 3.5rem);
+    margin: 0 0 8px;
+
+    font-size: clamp(1.9rem, 4vw, 3.2rem);
+
     line-height: 1;
   }
 
   .download-copy .sub {
     max-width: 54ch;
+
     margin-inline: auto;
 
-    font-size: clamp(0.85rem, 1.1vw, 1rem);
+    font-size: clamp(0.82rem, 1.1vw, 0.98rem);
+
+    line-height: 1.45;
   }
 
   .download-button {
     display: inline-flex;
+
     align-items: center;
     justify-content: center;
 
     gap: 9px;
 
-    margin-top: 16px;
-    padding: 12px 23px;
+    margin-top: 12px;
+
+    padding: 11px 22px;
 
     border: 0;
     border-radius: 999px;
 
     background: var(--md-primary-strong);
+
     color: #ffffff;
 
     font-size: 14px;
@@ -1403,7 +1867,8 @@
 
     text-decoration: none;
 
-    box-shadow: 0 8px 22px rgba(14, 98, 87, 0.16);
+    box-shadow:
+      0 8px 22px rgba(14, 98, 87, 0.16);
 
     transition:
       transform 180ms ease,
@@ -1416,7 +1881,8 @@
 
     background: #075b50;
 
-    box-shadow: 0 12px 26px rgba(14, 98, 87, 0.22);
+    box-shadow:
+      0 12px 26px rgba(14, 98, 87, 0.22);
   }
 
   .download-button:active {
@@ -1427,7 +1893,7 @@
     font-size: 19px;
   }
 
-  /* Phone */
+  /* Phone position */
 
   .phone-slot {
     position: absolute;
@@ -1475,7 +1941,7 @@
     height: 100%;
   }
 
-  /* Shadow */
+  /* Ground shadow */
 
   .contact-shadow {
     position: absolute;
@@ -1498,28 +1964,37 @@
     pointer-events: none;
   }
 
-  /* Scroll hint */
+  /* Scroll indicator */
 
   .scroll-hint {
     position: absolute;
 
-    right: 0;
-    bottom: 28px;
-    left: 0;
+    left: clamp(20px, 8%, 100px);
+
+    bottom: max(
+      20px,
+      calc(env(safe-area-inset-bottom) + 14px)
+    );
 
     z-index: 10;
 
     display: flex;
+
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
 
     gap: 9px;
+
+    width: fit-content;
 
     color: var(--stage-muted);
 
     font-size: 9px;
     font-weight: 700;
+
     letter-spacing: 0.15em;
+
+    pointer-events: none;
   }
 
   .hint-line {
@@ -1527,6 +2002,7 @@
     height: 1px;
 
     background: var(--stage-accent);
+
     opacity: 0.5;
   }
 
@@ -1535,31 +2011,30 @@
     font-size: 15px;
   }
 
-  /* Reduced motion */
+  /* Reduced-motion layout */
 
   .static-features {
     position: absolute;
 
-    top: 52%;
+    top: 34%;
     left: 8%;
 
     z-index: 8;
 
-    width: min(42%, 550px);
+    width: min(44%, 550px);
 
     display: grid;
-    gap: 16px;
 
-    translate: 0 -50%;
+    gap: 13px;
   }
 
   .static-features article {
-    padding: 14px 16px;
+    padding: 13px 16px;
 
     border: 1px solid var(--md-outline-variant);
     border-radius: 18px;
 
-    background: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.8);
   }
 
   .static-number {
@@ -1567,6 +2042,7 @@
 
     font-size: 10px;
     font-weight: 700;
+
     letter-spacing: 0.1em;
   }
 
@@ -1577,7 +2053,7 @@
 
     font-family: var(--font-display);
 
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 500;
   }
 
@@ -1597,9 +2073,11 @@
   .reduced-motion .stage {
     position: relative;
 
-    min-height: 1450px;
+    min-height: 1400px;
 
-    padding-top: 100px;
+    padding-top: 90px;
+
+    overflow: hidden;
 
     background: #ffffff;
   }
@@ -1624,7 +2102,7 @@
     width: auto;
     height: auto;
 
-    margin: 0 7% 28px;
+    margin: 0 7% 26px;
 
     visibility: visible;
     opacity: 1;
@@ -1638,29 +2116,26 @@
     margin: 0;
 
     font-size: clamp(2.4rem, 5vw, 4.4rem);
+
     opacity: 1;
   }
 
   .reduced-motion .static-features {
     top: 34%;
-    bottom: auto;
-
     left: 7%;
 
-    width: 48%;
-
-    translate: none;
+    width: min(46%, 560px);
   }
 
   .reduced-motion .download-copy {
-    position: absolute;
-
     top: auto;
-    right: 7%;
-    bottom: 38px;
+
+    right: auto;
+    bottom: 55px;
     left: 7%;
 
-    width: auto;
+    width: min(44%, 520px);
+
     height: auto;
 
     margin: 0;
@@ -1674,7 +2149,7 @@
   .reduced-motion .download-copy h2 {
     max-width: 15ch;
 
-    font-size: clamp(2rem, 4vw, 3.3rem);
+    font-size: clamp(2rem, 4vw, 3.2rem);
   }
 
   .reduced-motion .download-copy .sub {
@@ -1682,17 +2157,13 @@
   }
 
   .reduced-motion .phone-slot {
-    top: 66%;
-    left: 50%;
-
-    display: block;
+    top: 65%;
+    left: 74%;
 
     opacity: 1;
     visibility: visible;
 
-    transform:
-      rotateZ(90deg)
-      scale(0.85);
+    transform: rotateZ(90deg) scale(0.72);
 
     transition: none;
   }
@@ -1716,15 +2187,30 @@
     }
 
     .download-copy h2 {
-      font-size: clamp(2rem, 4.5vw, 3.2rem);
+      font-size: clamp(1.9rem, 4vw, 3rem);
     }
   }
 
   /* Mobile */
 
   @media (max-width: 767px) {
-    .stage {
-      min-height: 600px;
+    .problem {
+      inset-block:
+        clamp(80px, 12svh, 110px)
+        clamp(90px, 14svh, 120px);
+
+      right: 0;
+      left: 0;
+
+      width: 86%;
+
+      margin: auto;
+    }
+
+    .problem h1 {
+      max-width: 15ch;
+
+      font-size: clamp(2.25rem, 10vw, 3.4rem);
     }
 
     .copy {
@@ -1739,22 +2225,16 @@
     }
 
     .copy.problem {
-      inset-block: 0;
-
-      right: 0;
-      left: 0;
-
-      margin-block: auto;
+      inset-block:
+        clamp(80px, 12svh, 110px)
+        clamp(90px, 14svh, 120px);
     }
 
     .copy.feature-copy {
       right: auto;
       left: 7%;
-      width: 86%;
-    }
 
-    .problem h1 {
-      font-size: clamp(2.6rem, 12vw, 3.6rem);
+      width: 86%;
     }
 
     h1,
@@ -1774,7 +2254,7 @@
     }
 
     .download-copy {
-      top: 25px;
+      top: 22px;
       left: 5%;
 
       width: 90%;
@@ -1788,18 +2268,16 @@
 
     .download-copy .sub {
       max-width: 34ch;
+
       font-size: 11px;
     }
 
     .download-button {
       margin-top: 11px;
-      padding: 10px 19px;
-      font-size: 12px;
-    }
 
-    .scroll-hint {
-      bottom: 17px;
-      font-size: 8px;
+      padding: 10px 19px;
+
+      font-size: 12px;
     }
 
     .static-features {
@@ -1808,13 +2286,12 @@
 
       width: 86%;
 
-      translate: none;
-
       gap: 8px;
     }
 
     .static-features article {
       padding: 9px 12px;
+
       border-radius: 14px;
     }
 
@@ -1827,29 +2304,65 @@
     }
 
     .reduced-motion .stage {
-      min-height: 1350px;
-    }
-
-    .reduced-motion .copy.problem {
-      margin: 0 7% 20px;
+      min-height: 1600px;
     }
 
     .reduced-motion .static-features {
       top: 30%;
-      bottom: auto;
-
       left: 7%;
+
       width: 86%;
+    }
+
+    .reduced-motion .phone-slot {
+      top: 68%;
+      left: 50%;
+
+      transform: rotateZ(90deg) scale(0.66);
     }
 
     .reduced-motion .download-copy {
       right: 7%;
-      bottom: 35px;
+      bottom: 40px;
       left: 7%;
+
+      width: auto;
+    }
+  }
+
+  /*
+    Short viewports and browser magnification.
+
+    Keep the headline compact and reserve a clear bottom
+    region for the scroll hint.
+  */
+
+  @media (max-height: 680px) {
+    .problem {
+      inset-block:
+        clamp(55px, 9svh, 75px)
+        clamp(82px, 13svh, 105px);
     }
 
-    .reduced-motion .phone-slot {
-      display: none;
+    .problem h1 {
+      font-size: clamp(2.2rem, 6.5vw, 5.1rem);
+    }
+
+    .scroll-hint {
+      bottom: max(
+        18px,
+        calc(env(safe-area-inset-bottom) + 12px)
+      );
+    }
+  }
+
+  @media (max-width: 767px) and (max-height: 680px) {
+    .problem h1 {
+      font-size: clamp(2rem, 9vw, 2.8rem);
+    }
+
+    .download-copy h2 {
+      font-size: clamp(1.7rem, 7vw, 2.2rem);
     }
   }
 

@@ -1,5 +1,56 @@
 <script>
   let { children, depth = 18, radius = 18 } = $props();
+
+  /*
+    Build each rounded corner from short tangent facets.
+    The facets follow the rounded-rectangle perimeter and meet the
+    straight rails at exact tangent points, avoiding open corner gaps.
+  */
+  function createCornerFacets(startAngle) {
+    const segmentCount = 6;
+    const segmentAngle = 90 / segmentCount;
+    const halfAngle = (segmentAngle / 2) * Math.PI / 180;
+    const radialScale = Math.cos(halfAngle);
+
+    return Array.from({ length: segmentCount }, (_, index) => {
+      const angle = startAngle + (index + 0.5) * segmentAngle;
+      const radians = angle * Math.PI / 180;
+
+      return {
+        index,
+        x: Number((Math.cos(radians) * radialScale).toFixed(6)),
+        y: Number((Math.sin(radians) * radialScale).toFixed(6)),
+        tangent: `${angle + 90}deg`
+      };
+    });
+  }
+
+  const CORNER_ARCS = [
+    {
+      key: 'top-left',
+      left: 'var(--corner)',
+      top: 'var(--corner)',
+      facets: createCornerFacets(180)
+    },
+    {
+      key: 'top-right',
+      left: 'calc(100% - var(--corner))',
+      top: 'var(--corner)',
+      facets: createCornerFacets(-90)
+    },
+    {
+      key: 'bottom-right',
+      left: 'calc(100% - var(--corner))',
+      top: 'calc(100% - var(--corner))',
+      facets: createCornerFacets(0)
+    },
+    {
+      key: 'bottom-left',
+      left: 'var(--corner)',
+      top: 'calc(100% - var(--corner))',
+      facets: createCornerFacets(90)
+    }
+  ];
 </script>
 
 <div
@@ -27,7 +78,7 @@
     <div class="back-seam" aria-hidden="true"></div>
   </div>
 
-  <!-- Left and right side rails -->
+  <!-- Left and right side rails. These sit between the two glass faces. -->
   <div class="edge edge-left" aria-hidden="true">
     <span class="antenna antenna-top"></span>
     <span class="antenna antenna-bottom"></span>
@@ -42,7 +93,7 @@
     <span class="antenna antenna-bottom"></span>
   </div>
 
-  <!-- Top and bottom rails -->
+  <!-- Top and bottom rails complete the metal perimeter. -->
   <div class="edge edge-top" aria-hidden="true">
     <span class="antenna antenna-left"></span>
     <span class="antenna antenna-right"></span>
@@ -59,7 +110,23 @@
     <span class="bottom-mic"></span>
   </div>
 
-  <!-- Front glass and display. No camera punch-hole. -->
+  <!-- Rounded corner bridges connect the four straight metal rails. -->
+  {#each CORNER_ARCS as corner (corner.key)}
+    <div
+      class="corner-arc"
+      style={`left:${corner.left};top:${corner.top}`}
+      aria-hidden="true"
+    >
+      {#each corner.facets as facet (facet.index)}
+        <span
+          class="corner-facet"
+          style={`--facet-x:${facet.x};--facet-y:${facet.y};--facet-angle:${facet.tangent}`}
+        ></span>
+      {/each}
+    </div>
+  {/each}
+
+  <!-- Front glass and display. No camera punch-hole overlay. -->
   <div class="face front">
     <div class="bezel">
       <div class="screen">{@render children?.()}</div>
@@ -111,7 +178,9 @@
     overflow: hidden;
   }
 
-  /* Rear panel */
+  /* ---------------------------
+     Rear panel
+  --------------------------- */
 
   .back {
     transform: rotateY(180deg) translateZ(calc(var(--d) / 2));
@@ -281,7 +350,9 @@
     background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
   }
 
-  /* Titanium perimeter rails */
+  /* ---------------------------
+     Titanium perimeter rails
+  --------------------------- */
 
   .edge {
     top: 50%;
@@ -303,11 +374,11 @@
 
   .edge-left,
   .edge-right {
-    top: var(--corner);
+    top: calc(var(--corner) - .2px);
     width: var(--d);
-    height: calc(100% - var(--corner) - var(--corner));
+    height: calc(100% - var(--corner) - var(--corner) + .4px);
     margin-left: calc(var(--d) / -2);
-    border-radius: 3px;
+    border-radius: 2px;
   }
 
   .edge-left {
@@ -334,11 +405,11 @@
 
   .edge-top,
   .edge-bottom {
-    left: var(--corner);
-    width: calc(100% - var(--corner) - var(--corner));
+    left: calc(var(--corner) - .2px);
+    width: calc(100% - var(--corner) - var(--corner) + .4px);
     height: var(--d);
     margin-top: calc(var(--d) / -2);
-    border-radius: 3px;
+    border-radius: 2px;
   }
 
   .edge-top {
@@ -352,6 +423,49 @@
         #e5ebe6 0%,
         #a2ada5 35%,
         #5c6860 100%);
+  }
+
+  /*
+    Each corner is a short polygonal arc extruded across the phone depth.
+    Six facets per corner approximate the rounded chassis while keeping
+    the perimeter continuous and avoiding gaps at the rail junctions.
+  */
+  .corner-arc {
+    position: absolute;
+    z-index: 2;
+    width: 0;
+    height: 0;
+    overflow: visible;
+    transform-style: preserve-3d;
+    -webkit-transform-style: preserve-3d;
+    pointer-events: none;
+  }
+
+  .corner-facet {
+    position: absolute;
+    left: calc(var(--corner) * var(--facet-x));
+    top: calc(var(--corner) * var(--facet-y));
+    width: calc(var(--corner) * .261052 + .2px);
+    height: var(--d);
+    box-sizing: border-box;
+    border: 0;
+    background:
+      linear-gradient(180deg,
+        #657169 0%,
+        #e1e8e2 15%,
+        #aeb9b1 48%,
+        #dce4dd 84%,
+        #606c64 100%);
+    box-shadow:
+      inset 0 1px 1px rgba(255,255,255,.72),
+      inset 0 -1px 1px rgba(24,36,29,.34);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transform-origin: 50% 50%;
+    transform:
+      translate(-50%, -50%)
+      rotateZ(var(--facet-angle))
+      rotateX(90deg);
   }
 
   /* Physical side keys sit slightly proud of the right rail. */
@@ -480,7 +594,9 @@
     box-shadow: 0 0 0 1px rgba(255,255,255,.35);
   }
 
-  /* Front glass and display */
+  /* ---------------------------
+     Front glass and display
+  --------------------------- */
 
   .front {
     z-index: 3;

@@ -1,19 +1,16 @@
 <script>
-  import { tick } from 'svelte';
-
-  let {
-    motionPaused = false,
-    soundEnabled = false,
-    onToggleMotion = () => {},
-    onToggleSound = () => {}
-  } = $props();
+  import { onDestroy, tick } from 'svelte';
+  import { acquireScrollLock } from './scrollLock.js';
 
   let infoOpen = $state(false);
   let githubOpen = $state(false);
+  let activeControl = $state(0);
 
   let infoButton;
-  let closeButton;
-  let dialogElement;
+  let githubButton;
+  let closeButton = $state(null);
+  let dialogElement = $state(null);
+  let releaseModalScrollLock = null;
 
   const team = [
     {
@@ -42,9 +39,15 @@
     }
   ];
 
+  function releaseInfoLock() {
+    releaseModalScrollLock?.();
+    releaseModalScrollLock = null;
+  }
+
   async function openInfo() {
     githubOpen = false;
     infoOpen = true;
+    releaseModalScrollLock ??= acquireScrollLock();
 
     await tick();
 
@@ -52,21 +55,70 @@
   }
 
   async function closeInfo() {
+    if (!infoOpen) return;
+
     infoOpen = false;
+    releaseInfoLock();
 
     await tick();
 
     infoButton?.focus();
   }
 
+  function closeGithub(restoreFocus = false) {
+    if (!githubOpen) return;
+
+    githubOpen = false;
+
+    if (restoreFocus) {
+      tick().then(() => githubButton?.focus());
+    }
+  }
+
   function toggleGithub() {
-    githubOpen = !githubOpen;
-    infoOpen = false;
+    if (githubOpen) {
+      closeGithub(true);
+      return;
+    }
+
+    githubOpen = true;
+  }
+
+  function handleToolbarKeydown(event) {
+    const buttons = [
+      ...event.currentTarget.querySelectorAll('.control:not(:disabled)')
+    ];
+
+    if (!buttons.length) return;
+
+    const currentIndex = buttons.indexOf(event.target);
+    if (currentIndex < 0) return;
+
+    let nextIndex = currentIndex;
+
+    if (event.key === 'ArrowRight') {
+      nextIndex = (currentIndex + 1) % buttons.length;
+    } else if (event.key === 'ArrowLeft') {
+      nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = buttons.length - 1;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+
+    const target = buttons[nextIndex];
+    activeControl = Number(target.dataset.controlIndex);
+    target.focus();
   }
 
   function handleDialogKeydown(event) {
     if (event.key === 'Escape') {
       event.preventDefault();
+      event.stopPropagation();
       closeInfo();
       return;
     }
@@ -84,80 +136,83 @@
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
 
-    if (
-      event.shiftKey &&
-      document.activeElement === first
-    ) {
+    if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last.focus();
-    } else if (
-      !event.shiftKey &&
-      document.activeElement === last
-    ) {
+    } else if (!event.shiftKey && document.activeElement === last) {
       event.preventDefault();
       first.focus();
     }
   }
+
+  function handleWindowKeydown(event) {
+    if (event.key === 'Escape' && githubOpen && !infoOpen) {
+      event.preventDefault();
+      closeGithub(true);
+    }
+  }
+
+  function handleWindowPointerDown(event) {
+    if (!githubOpen || !(event.target instanceof Element)) return;
+
+    if (event.target.closest('.github-panel, .github-control')) return;
+
+    closeGithub();
+  }
+
+  onDestroy(() => {
+    releaseInfoLock();
+  });
 </script>
 
+<svelte:window
+  onkeydown={handleWindowKeydown}
+  onpointerdown={handleWindowPointerDown}
+/>
+
 <!-- Floating control dock -->
-<div class="control-dock" role="toolbar" aria-label="Page controls">
-
-  <button
-    class="control"
-    class:active={motionPaused}
-    type="button"
-    aria-label={motionPaused ? 'Resume animations' : 'Pause animations'}
-    aria-pressed={motionPaused}
-    title={motionPaused ? 'Resume animations' : 'Pause animations'}
-    onclick={onToggleMotion}
-  >
-    <span class="material-symbols-rounded" aria-hidden="true">
-      {motionPaused ? 'play_arrow' : 'pause'}
-    </span>
-  </button>
-
-  <button
-    class="control"
-    class:active={soundEnabled}
-    type="button"
-    aria-label={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
-    aria-pressed={soundEnabled}
-    title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
-    onclick={onToggleSound}
-  >
-    <span class="material-symbols-rounded" aria-hidden="true">
-      {soundEnabled ? 'volume_up' : 'volume_off'}
-    </span>
-  </button>
-
+<div
+  class="control-dock"
+  role="toolbar"
+  aria-label="Page controls"
+  aria-orientation="horizontal"
+  tabindex="-1"
+  onkeydown={handleToolbarKeydown}
+>
   <button
     bind:this={infoButton}
     class="control"
     type="button"
+    data-control-index="0"
+    tabindex={activeControl === 0 ? 0 : -1}
     aria-label="Medical disclaimer and credits"
     aria-haspopup="dialog"
-    title="Disclaimer and credits"
+    aria-controls="medical-disclaimer-dialog"
+    title="Medical disclaimer"
+    onfocus={() => activeControl = 0}
     onclick={openInfo}
   >
-    <span class="material-symbols-rounded" aria-hidden="true">
-      info
-    </span>
+    <span class="material-symbols-rounded" aria-hidden="true">info</span>
   </button>
 
   <button
+    bind:this={githubButton}
     class="control github-control"
     class:active={githubOpen}
     type="button"
+    data-control-index="1"
+    tabindex={activeControl === 1 ? 0 : -1}
     aria-label="View the team on GitHub"
     aria-expanded={githubOpen}
+    aria-controls="github-team-panel"
     title="GitHub profiles"
+    onfocus={() => activeControl = 1}
     onclick={toggleGithub}
   >
     <svg
       viewBox="0 0 24 24"
-      width="21"
-      height="21"
+      width="22"
+      height="22"
       fill="currentColor"
       aria-hidden="true"
     >
@@ -166,25 +221,25 @@
       />
     </svg>
   </button>
-
 </div>
 
 <!-- GitHub team panel -->
 {#if githubOpen}
-  <section class="github-panel" aria-label="Team GitHub profiles">
+  <section
+    id="github-team-panel"
+    class="github-panel"
+    aria-labelledby="github-panel-title"
+  >
     <header class="panel-heading">
-      <div>
-        <span class="panel-eyebrow">THE PEOPLE BEHIND PATNUB.AI</span>
-        <h2>Find us on GitHub.</h2>
-      </div>
+      <h2 id="github-panel-title">Meet the team</h2>
 
       <button
         class="panel-close"
         type="button"
         aria-label="Close GitHub panel"
-        onclick={() => githubOpen = false}
+        onclick={() => closeGithub(true)}
       >
-        <span class="material-symbols-rounded">close</span>
+        <span class="material-symbols-rounded" aria-hidden="true">close</span>
       </button>
     </header>
 
@@ -202,27 +257,26 @@
           </div>
 
           <span class="github-username">@{member.username}</span>
-
-          <span class="material-symbols-rounded">open_in_new</span>
+          <span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>
         </a>
       {/each}
     </div>
   </section>
 {/if}
 
-<!-- Disclaimer modal -->
+<!-- Medical disclaimer dialog -->
 {#if infoOpen}
   <div class="modal-layer">
-
     <button
       class="modal-backdrop"
       type="button"
       tabindex="-1"
-      aria-label="Close information dialog"
+      aria-label="Close medical disclaimer"
       onclick={closeInfo}
     ></button>
 
-    <section
+    <div
+      id="medical-disclaimer-dialog"
       class="info-dialog"
       bind:this={dialogElement}
       role="dialog"
@@ -233,10 +287,7 @@
       onkeydown={handleDialogKeydown}
     >
       <header class="dialog-header">
-        <div>
-          <span class="dialog-eyebrow">PATNUB.AI · INFORMATION</span>
-          <h2 id="info-title">A note about your health.</h2>
-        </div>
+        <h2 id="info-title">Medical disclaimer</h2>
 
         <button
           bind:this={closeButton}
@@ -245,113 +296,78 @@
           aria-label="Close dialog"
           onclick={closeInfo}
         >
-          <span class="material-symbols-rounded">close</span>
+          <span class="material-symbols-rounded" aria-hidden="true">close</span>
         </button>
       </header>
 
       <div class="dialog-content">
-
-        <!-- What it is -->
-        <section class="info-section">
-          <h3>What is patnub.ai?</h3>
-
+        <section class="info-section disclaimer-copy">
           <p id="info-intro">
-            patnub.ai is a health-information companion designed
-            to help people understand, organize, and revisit
-            health information and clinician-approved instructions.
-            It uses AI and external health references to present
-            information in more understandable language.
-          </p>
-        </section>
-
-        <!-- Limitations -->
-        <section class="info-section">
-          <h3>What it is not</h3>
-
-          <p>
-            patnub.ai is not a doctor, healthcare provider,
-            diagnostic tool, or emergency service. It is not a
-            substitute for professional medical advice,
-            diagnosis, or treatment.
+            patnub.ai helps people understand, organize, and revisit health
+            information and clinician-approved instructions. It uses AI and
+            external references to explain information in plainer language.
           </p>
 
           <p>
-            AI-generated information may be incomplete, outdated,
-            or inaccurate. Do not use it as the sole basis for
-            diagnosing a condition, choosing a treatment, or
-            changing medication. Consult a qualified healthcare
-            professional about decisions concerning your health.
+            patnub.ai is not a healthcare provider, diagnostic tool, or
+            emergency service. AI-generated information may be incomplete,
+            outdated, or inaccurate. Do not rely on it alone to diagnose a
+            condition, choose treatment, or change medication. Consult a
+            qualified healthcare professional about your care.
           </p>
         </section>
 
-        <!-- Emergency guidance -->
-        <section class="urgent-notice">
+        <section class="urgent-notice" aria-labelledby="emergency-title">
           <div class="urgent-heading">
-            <span class="material-symbols-rounded">emergency</span>
-            <h3>For immediate or severe cases</h3>
+            <span class="material-symbols-rounded" aria-hidden="true">emergency</span>
+            <h3 id="emergency-title">Medical emergencies</h3>
           </div>
 
           <p>
-            Do not wait for an application response when you
-            experience severe or potentially life-threatening
-            symptoms, such as difficulty breathing, chest pain,
-            severe bleeding, loss of consciousness, or possible
-            signs of stroke.
+            Do not wait for an application response for severe or potentially
+            life-threatening symptoms, including difficulty breathing, chest
+            pain, severe bleeding, loss of consciousness, or possible signs
+            of stroke. Seek immediate medical attention.
           </p>
 
-          <p>
-            Seek immediate medical attention at the nearest
-            emergency department. In the Philippines, call
-            the National Emergency Hotline. Outside the Philippines,
-            contact your local emergency service.
-          </p>
+          <div class="emergency-actions">
+            <a class="emergency-link" href="tel:911">
+              <span class="material-symbols-rounded" aria-hidden="true">call</span>
+              Call 911 in the Philippines
+            </a>
 
-          <a class="emergency-link" href="tel:911">
-            <span class="material-symbols-rounded">call</span>
-            Call 911
-          </a>
-
-          <a
-            class="text-link emergency-source"
-            href="https://ehotlines.e.gov.ph/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Official Philippine emergency hotline directory
-            <span class="material-symbols-rounded">open_in_new</span>
-          </a>
+            <a
+              class="text-link emergency-source"
+              href="https://ehotlines.e.gov.ph/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Official emergency hotline directory
+            </a>
+          </div>
         </section>
 
-        <!-- AI model -->
         <section class="info-section">
-          <span class="section-label">AI MODEL</span>
+          <h3>Information sources</h3>
+          <p class="section-intro">
+            These resources serve different purposes. Listing a source does
+            not mean every generated answer has been independently validated
+            against it.
+          </p>
 
-          <h3>
+          <div class="source-list">
             <a
-              class="inline-link"
+              class="source-item"
               href="https://developers.google.com/health-ai-developer-foundations/medgemma/model-card"
               target="_blank"
               rel="noopener noreferrer"
             >
-              MedGemma
-              <span class="material-symbols-rounded">open_in_new</span>
+              <span class="source-copy">
+                <b>MedGemma</b>
+                <span>Google's medical-domain AI model; not a medical reference database or a substitute for clinical review.</span>
+              </span>
+              <span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>
             </a>
-          </h3>
-
-          <p>
-            MedGemma is a medical-domain AI model from Google.
-            It is a development model, not a medical reference
-            database or a replacement for a clinician. Its outputs
-            are preliminary and require independent verification
-            and clinical correlation.
-          </p>
-        </section>
-
-        <!-- Medical information sources -->
-        <section class="info-section">
-          <span class="section-label">MEDICAL INFORMATION REFERENCES</span>
-
-          <div class="source-list">
 
             <a
               class="source-item"
@@ -361,14 +377,9 @@
             >
               <span class="source-copy">
                 <b>openFDA</b>
-                <span>
-                  Public U.S. FDA datasets about drugs, devices,
-                  foods, recalls, and regulatory information.
-                  Not all records are validated for clinical use.
-                </span>
+                <span>Public U.S. FDA datasets covering drugs, devices, foods, recalls, and regulatory information.</span>
               </span>
-
-              <span class="material-symbols-rounded">open_in_new</span>
+              <span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>
             </a>
 
             <a
@@ -379,13 +390,9 @@
             >
               <span class="source-copy">
                 <b>MyHealthfinder</b>
-                <span>
-                  Evidence-based consumer health information from
-                  the U.S. Department of Health and Human Services.
-                </span>
+                <span>Consumer health information from the U.S. Department of Health and Human Services.</span>
               </span>
-
-              <span class="material-symbols-rounded">open_in_new</span>
+              <span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>
             </a>
 
             <a
@@ -396,13 +403,9 @@
             >
               <span class="source-copy">
                 <b>CDC APIs</b>
-                <span>
-                  API catalog and public-health data services
-                  from the U.S. Centers for Disease Control and Prevention.
-                </span>
+                <span>Public-health data services from the U.S. Centers for Disease Control and Prevention.</span>
               </span>
-
-              <span class="material-symbols-rounded">open_in_new</span>
+              <span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>
             </a>
 
             <a
@@ -413,36 +416,18 @@
             >
               <span class="source-copy">
                 <b>Philippine FDA Verification Portal</b>
-                <span>
-                  A local resource for checking registered health
-                  products and licensed establishments in the Philippines.
-                </span>
+                <span>Check registered health products and licensed establishments in the Philippines.</span>
               </span>
-
-              <span class="material-symbols-rounded">open_in_new</span>
+              <span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>
             </a>
-
           </div>
-
-          <p class="source-footnote">
-            These references have different purposes. MedGemma
-            is an AI model, while the others provide information,
-            datasets, or regulatory verification. Listing a source
-            does not mean that every generated answer uses or has
-            been independently validated against every reference.
-          </p>
-
-          <p class="source-footnote">
-            Some references are U.S.-based and may not reflect
-            Philippine regulatory decisions or local clinical guidance.
-          </p>
 
           <div class="myhealthfinder-credit">
             <a
               href="https://odphp.health.gov/myhealthfinder"
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="MyHealthfinder, official source"
+              aria-label="MyHealthfinder official website"
             >
               <img
                 src="https://odphp.health.gov/themes/custom/healthfinder/images/MyHF.svg"
@@ -456,27 +441,29 @@
               target="_blank"
               rel="noopener noreferrer"
             >
-              MyHealthfinder API terms of use
-              <span class="material-symbols-rounded">open_in_new</span>
+              MyHealthfinder API terms
+              <span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>
             </a>
           </div>
 
           <p class="source-footnote">
-            When MyHealthfinder API content is displayed, its terms
-            require source attribution, the supplied logo and link,
-            preservation of the original content, and its last-updated
-            date alongside the content.
+            When MyHealthfinder API content is displayed, its terms require
+            source attribution, the supplied logo and link, preservation of
+            the original content, and its last-updated date alongside it.
+          </p>
+
+          <p class="source-footnote">
+            Some listed references are U.S.-based and may not reflect
+            Philippine regulatory decisions or local clinical guidance.
           </p>
         </section>
 
-        <!-- 3D model -->
-        <section class="info-section">
-          <span class="section-label">3D MODEL ATTRIBUTION</span>
-
-          <h3>Samsung Galaxy S24 Ultra</h3>
+        <section class="info-section legal-note">
+          <h3>Credits and trademarks</h3>
 
           <p>
-            3D model by <b>Sketcher</b>, sourced from
+            The Samsung Galaxy S24 Ultra 3D model is by <b>Sketcher</b>,
+            sourced from
             <a
               class="inline-link"
               href="https://sketchfab.com/3d-models/samsung-s24-ultra-b05e35cc5fa540cba52e055b378c28bd"
@@ -484,48 +471,27 @@
               rel="noopener noreferrer"
             >
               Sketchfab
-              <span class="material-symbols-rounded">open_in_new</span>
-            </a>.
-          </p>
-
-          <p>
-            Licensed under
+              <span class="material-symbols-rounded" aria-hidden="true">open_in_new</span>
+            </a>, and licensed under
             <a
               class="inline-link"
               href="https://creativecommons.org/licenses/by/4.0/"
               target="_blank"
               rel="noopener noreferrer"
             >
-              Creative Commons Attribution 4.0 International (CC BY 4.0)
-            </a>.
+              CC BY 4.0
+            </a>. It has been modified for this presentation.
           </p>
 
           <p>
-            Modified for patnub.ai presentation, including
-            screen overlays, positioning, lighting, and animation.
+            Samsung, Galaxy, and Samsung Galaxy S24 Ultra are trademarks of
+            Samsung Electronics Co., Ltd. The device is illustrative only.
+            patnub.ai is independently developed and is not affiliated with,
+            sponsored by, or endorsed by Samsung.
           </p>
         </section>
-
-        <!-- Trademark -->
-        <section class="info-section legal-note">
-          <h3>Trademark notice</h3>
-
-          <p>
-            Samsung, Galaxy, and Samsung Galaxy S24 Ultra are
-            trademarks of Samsung Electronics Co., Ltd. The
-            device model is used for illustrative purposes.
-            patnub.ai is independently developed and is not
-            affiliated with, sponsored by, or endorsed by Samsung.
-          </p>
-        </section>
-
       </div>
-
-      <footer class="dialog-footer">
-        <span>patnub.ai</span>
-        <span>Care that stays with you.</span>
-      </footer>
-    </section>
+    </div>
   </div>
 {/if}
 
@@ -536,83 +502,71 @@
     font-family: var(--font-body);
   }
 
-  /* Floating dock */
+  /* Floating toolbar */
 
   .control-dock {
     position: fixed;
-
     right: clamp(18px, 3vw, 38px);
-
-    bottom: max(
-      20px,
-      calc(env(safe-area-inset-bottom) + 14px)
-    );
-
+    bottom: max(20px, calc(env(safe-area-inset-bottom) + 14px));
     z-index: 100;
 
     display: flex;
     align-items: center;
-
-    gap: 7px;
-
+    gap: 5px;
     padding: 7px;
 
-    border: 1px solid rgba(209, 221, 215, 0.9);
-    border-radius: 23px;
-
-    background: rgba(249, 252, 250, 0.92);
-
+    border: 1px solid rgba(209, 221, 215, 0.92);
+    border-radius: 27px;
+    background: rgba(245, 250, 248, 0.94);
     box-shadow:
       0 8px 28px rgba(27, 58, 49, 0.11),
       0 1px 3px rgba(27, 58, 49, 0.05);
-
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
   }
 
   .control {
-    width: 43px;
-    height: 43px;
-
+    width: 48px;
+    height: 48px;
     flex: none;
 
     display: grid;
     place-items: center;
-
     padding: 0;
 
     border: 0;
-    border-radius: 16px;
-
+    border-radius: 18px;
     background: transparent;
-    color: #52645e;
-
+    color: var(--md-on-surface-variant);
     cursor: pointer;
 
     transition:
-      background 180ms ease,
+      background-color 180ms ease,
       color 180ms ease,
       transform 180ms ease;
   }
 
-  .control:hover {
-    background: #e8f2ed;
-    color: #0b796b;
-
-    transform: translateY(-2px);
+  .control:hover:not(:disabled) {
+    background: var(--md-surface-container-high);
+    color: var(--md-primary-strong);
   }
 
-  .control:active {
+  .control:active:not(:disabled) {
     transform: scale(0.94);
   }
 
   .control.active {
-    background: #d5f1e9;
-    color: #0b796b;
+    background: var(--md-primary-container);
+    color: var(--md-on-primary-container);
+  }
+
+  .control:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
   }
 
   .control .material-symbols-rounded {
-    font-size: 21px;
+    font-size: 24px;
   }
 
   .github-control svg {
@@ -623,147 +577,116 @@
   .panel-close:focus-visible,
   .github-member:focus-visible,
   .info-dialog a:focus-visible {
-    outline: 3px solid #0e8f7e;
+    outline: 3px solid var(--md-primary);
     outline-offset: 3px;
   }
 
-  /* GitHub panel */
+  /* GitHub team surface */
 
   .github-panel {
     position: fixed;
-
     right: clamp(18px, 3vw, 38px);
-
-    bottom: calc(
-      max(20px, env(safe-area-inset-bottom)) + 76px
-    );
-
+    bottom: calc(max(20px, env(safe-area-inset-bottom)) + 82px);
     z-index: 101;
 
-    width: min(350px, calc(100vw - 36px));
+    width: min(360px, calc(100vw - 36px));
+    padding: 20px;
 
-    padding: 19px;
-
-    border: 1px solid #d1ddd7;
-    border-radius: 25px;
-
-    background: #fbfdfa;
-    color: #17231f;
-
+    border: 1px solid var(--md-outline-variant);
+    border-radius: 26px;
+    background: var(--md-surface);
+    color: var(--md-on-surface);
     box-shadow: 0 18px 55px rgba(27, 58, 49, 0.16);
 
-    animation: panel-in 220ms cubic-bezier(.2,.8,.2,1) both;
+    animation: panel-in 220ms cubic-bezier(.2, .8, .2, 1) both;
   }
 
   .panel-heading,
   .dialog-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-
     gap: 16px;
-  }
-
-  .panel-eyebrow,
-  .dialog-eyebrow {
-    color: #0e8f7e;
-
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.11em;
   }
 
   .panel-heading h2,
   .dialog-header h2 {
-    margin: 5px 0 0;
-
-    color: #17231f;
-
+    margin: 0;
+    color: var(--md-on-surface);
     font-family: var(--font-display);
-
-    font-size: 23px;
+    font-size: 24px;
     font-weight: 600;
-
-    letter-spacing: -0.04em;
+    letter-spacing: -0.035em;
     line-height: 1.1;
   }
 
   .panel-close {
+    width: 48px;
+    height: 48px;
     flex: none;
-
-    width: 34px;
-    height: 34px;
 
     display: grid;
     place-items: center;
+    padding: 0;
 
     border: 0;
     border-radius: 50%;
-
-    background: #edf4f0;
-    color: #52645e;
-
+    background: var(--md-surface-container);
+    color: var(--md-on-surface-variant);
     cursor: pointer;
 
     transition:
-      background 160ms ease,
+      background-color 160ms ease,
       color 160ms ease;
   }
 
   .panel-close:hover {
-    background: #d5f1e9;
-    color: #0b796b;
+    background: var(--md-primary-container);
+    color: var(--md-on-primary-container);
   }
 
   .panel-close .material-symbols-rounded {
-    font-size: 19px;
+    font-size: 21px;
   }
 
   .github-team {
     display: grid;
-    gap: 4px;
-
-    margin-top: 16px;
+    gap: 3px;
+    margin-top: 12px;
   }
 
   .github-member {
+    min-height: 58px;
     display: grid;
-
-    grid-template-columns: minmax(0, 1fr) auto 16px;
-
+    grid-template-columns: minmax(0, 1fr) auto 18px;
     align-items: center;
     gap: 10px;
-
-    padding: 11px 9px;
-
-    border-radius: 13px;
-
+    padding: 9px 10px;
+    border-radius: 16px;
     color: inherit;
     text-decoration: none;
-
-    transition: background 160ms ease;
+    transition: background-color 160ms ease;
   }
 
   .github-member:hover {
-    background: #edf5f0;
+    background: var(--md-surface-container-low);
   }
 
   .github-member-copy {
     min-width: 0;
-
     display: grid;
-    gap: 3px;
+    gap: 4px;
   }
 
   .github-member-copy b {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 700;
   }
 
   .github-member-copy span,
   .github-username {
-    color: #71827a;
-    font-size: 10px;
+    color: var(--md-on-surface-variant);
+    font-size: 12px;
   }
 
   .github-username {
@@ -771,21 +694,19 @@
   }
 
   .github-member > .material-symbols-rounded {
-    color: #0e8f7e;
-    font-size: 16px;
+    color: var(--md-primary);
+    font-size: 18px;
   }
 
-  /* Modal */
+  /* Medical disclaimer dialog */
 
   .modal-layer {
     position: fixed;
     inset: 0;
-
     z-index: 1000;
 
     display: grid;
     place-items: center;
-
     padding:
       max(18px, env(safe-area-inset-top))
       max(16px, env(safe-area-inset-right))
@@ -796,72 +717,56 @@
   .modal-backdrop {
     position: absolute;
     inset: 0;
-
     width: 100%;
     height: 100%;
-
     border: 0;
-
     background: rgba(12, 30, 24, 0.48);
-
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
-
     cursor: default;
   }
 
   .info-dialog {
     position: relative;
     z-index: 1;
-
-    width: min(660px, 100%);
-    max-height: min(86dvh, 850px);
+    width: min(560px, 100%);
+    max-height: min(88dvh, 850px);
 
     display: flex;
     flex-direction: column;
-
     overflow: hidden;
 
-    border: 1px solid #d1ddd7;
+    border: 1px solid var(--md-outline-variant);
     border-radius: 28px;
-
-    background: #fbfdfa;
-    color: #17231f;
-
+    background: var(--md-surface);
+    color: var(--md-on-surface);
     box-shadow: 0 30px 90px rgba(8, 30, 24, 0.28);
 
-    animation: dialog-in 260ms cubic-bezier(.2,.8,.2,1) both;
+    animation: dialog-in 240ms cubic-bezier(.2, .8, .2, 1) both;
   }
 
   .dialog-header {
     flex: none;
-    align-items: center;
-
-    padding: 23px 25px 20px;
-
-    border-bottom: 1px solid #e2ebe5;
-
-    background: #f9fcfa;
+    padding: 20px 24px 18px;
+    border-bottom: 1px solid var(--md-outline-variant);
+    background: var(--md-surface-container-low);
   }
 
   .dialog-header h2 {
-    font-size: clamp(23px, 4vw, 30px);
+    font-size: clamp(24px, 4vw, 28px);
   }
 
   .dialog-content {
     min-height: 0;
-
     overflow-y: auto;
     overscroll-behavior: contain;
-
-    padding: 22px 25px 26px;
+    padding: 22px 24px 24px;
   }
 
   .info-section {
     display: grid;
-    gap: 9px;
-
-    margin-bottom: 25px;
+    gap: 11px;
+    margin-bottom: 23px;
   }
 
   .info-section:last-child {
@@ -870,43 +775,32 @@
 
   .info-section h3 {
     margin: 0;
-
-    color: #1b3028;
-
-    font-size: 15px;
+    color: var(--md-on-surface);
+    font-size: 16px;
     font-weight: 700;
   }
 
-  .info-section p {
+  .info-section p,
+  .urgent-notice p {
     margin: 0;
-
-    color: #52645e;
-
-    font-size: 12px;
-    line-height: 1.75;
+    color: var(--md-on-surface-variant);
+    font-size: 14px;
+    line-height: 1.6;
   }
 
-  .section-label {
-    color: #0e8f7e;
-
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.13em;
+  .disclaimer-copy {
+    gap: 12px;
   }
 
-  /* Emergency notice */
+  /* Emergency information */
 
   .urgent-notice {
     display: grid;
-    gap: 11px;
-
-    margin: 25px 0;
-
+    gap: 12px;
+    margin: 0 0 23px;
     padding: 18px;
-
     border: 1px solid #f0d8c7;
-    border-radius: 19px;
-
+    border-radius: 20px;
     background: #fff5ed;
   }
 
@@ -918,66 +812,112 @@
 
   .urgent-heading .material-symbols-rounded {
     color: #ad4c2b;
-    font-size: 22px;
+    font-size: 23px;
   }
 
   .urgent-heading h3 {
     margin: 0;
-
     color: #763b28;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
   }
 
   .urgent-notice p {
-    margin: 0;
-
     color: #6c5145;
+  }
 
-    font-size: 12px;
-    line-height: 1.65;
+  .emergency-actions {
+    display: grid;
+    justify-items: start;
+    gap: 7px;
   }
 
   .emergency-link {
-    width: fit-content;
-
+    min-height: 48px;
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-
-    padding: 9px 14px;
-
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 16px;
     border-radius: 999px;
-
     background: #a84127;
     color: #ffffff;
-
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 700;
-
     text-decoration: none;
   }
 
   .emergency-link .material-symbols-rounded {
-    font-size: 16px;
+    font-size: 19px;
   }
 
   .emergency-source {
-    width: fit-content;
-
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
     color: #8a513a;
-    font-size: 10px;
+    font-size: 12px;
   }
 
-  /* Links */
+  /* Source links */
+
+  .section-intro {
+    margin-top: -3px !important;
+  }
+
+  .source-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .source-item {
+    min-height: 64px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20px;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 13px;
+    border: 1px solid var(--md-outline-variant);
+    border-radius: 16px;
+    background: var(--md-surface-container-low);
+    color: inherit;
+    text-decoration: none;
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease;
+  }
+
+  .source-item:hover {
+    border-color: #b3d9ca;
+    background: var(--md-primary-container);
+  }
+
+  .source-copy {
+    display: grid;
+    gap: 4px;
+  }
+
+  .source-copy b {
+    color: var(--md-on-surface);
+    font-size: 14px;
+  }
+
+  .source-copy span {
+    color: var(--md-on-surface-variant);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .source-item > .material-symbols-rounded {
+    color: var(--md-primary);
+    font-size: 18px;
+  }
 
   .inline-link {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-
-    color: #087d6e;
-
+    color: var(--md-primary-strong);
     font-weight: 700;
     text-decoration: none;
   }
@@ -987,129 +927,39 @@
   }
 
   .inline-link .material-symbols-rounded {
-    font-size: 13px;
-  }
-
-  /* Source list */
-
-  .source-list {
-    display: grid;
-    gap: 5px;
-  }
-
-  .source-item {
-    display: grid;
-
-    grid-template-columns: minmax(0, 1fr) 18px;
-
-    align-items: center;
-    gap: 12px;
-
-    padding: 12px;
-
-    border: 1px solid #e0e9e3;
-    border-radius: 14px;
-
-    background: #ffffff;
-
-    color: inherit;
-    text-decoration: none;
-
-    transition:
-      background 160ms ease,
-      border-color 160ms ease;
-  }
-
-  .source-item:hover {
-    border-color: #b3d9ca;
-    background: #f1f8f4;
-  }
-
-  .source-copy {
-    display: grid;
-    gap: 4px;
-  }
-
-  .source-copy b {
-    color: #1b3028;
-    font-size: 12px;
-  }
-
-  .source-copy span {
-    color: #62736b;
-
-    font-size: 11px;
-    line-height: 1.5;
-  }
-
-  .source-item > .material-symbols-rounded {
-    color: #0e8f7e;
-    font-size: 16px;
+    font-size: 14px;
   }
 
   .info-section .source-footnote {
-    margin-top: 7px;
-
-    color: #788780;
-
-    font-size: 10px;
-    line-height: 1.6;
+    margin-top: 2px;
+    color: #71827a;
+    font-size: 12px;
+    line-height: 1.5;
   }
 
   .myhealthfinder-credit {
+    min-height: 56px;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-
     gap: 12px;
-
-    margin-top: 8px;
-    padding: 10px;
-
-    border: 1px solid #e0e9e3;
-    border-radius: 12px;
-
+    margin-top: 5px;
+    padding: 10px 12px;
+    border: 1px solid var(--md-outline-variant);
+    border-radius: 14px;
     background: #ffffff;
   }
 
   .myhealthfinder-credit img {
     display: block;
-
     width: 132px;
     max-height: 34px;
-
     object-fit: contain;
   }
 
   .legal-note {
     padding-top: 19px;
-
-    border-top: 1px solid #e0e9e3;
-  }
-
-  /* Footer */
-
-  .dialog-footer {
-    flex: none;
-
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-
-    gap: 12px;
-
-    padding: 14px 25px;
-
-    border-top: 1px solid #e2ebe5;
-
-    color: #7b8b83;
-
-    font-size: 10px;
-  }
-
-  .dialog-footer span:first-child {
-    color: #0e8f7e;
-    font-weight: 700;
+    border-top: 1px solid var(--md-outline-variant);
   }
 
   @keyframes panel-in {
@@ -1139,70 +989,49 @@
   @media (max-width: 560px) {
     .control-dock {
       right: 14px;
-
-      bottom: max(
-        15px,
-        calc(env(safe-area-inset-bottom) + 10px)
-      );
-
-      gap: 3px;
-      padding: 5px;
-
-      border-radius: 19px;
+      bottom: max(15px, calc(env(safe-area-inset-bottom) + 10px));
+      gap: 4px;
+      padding: 6px;
+      border-radius: 23px;
     }
 
     .control {
-      width: 39px;
-      height: 39px;
-
-      border-radius: 14px;
-    }
-
-    .control .material-symbols-rounded {
-      font-size: 19px;
-    }
-
-    .github-control svg {
-      width: 19px;
-      height: 19px;
+      width: 48px;
+      height: 48px;
+      border-radius: 17px;
     }
 
     .github-panel {
       right: 14px;
-
-      bottom: calc(
-        max(15px, env(safe-area-inset-bottom)) + 66px
-      );
-
-      padding: 16px;
-
-      border-radius: 21px;
-    }
-
-    .info-dialog {
-      max-height: 88dvh;
+      bottom: calc(max(15px, env(safe-area-inset-bottom)) + 82px);
+      padding: 17px;
       border-radius: 23px;
     }
 
+    .github-member {
+      grid-template-columns: minmax(0, 1fr) auto 18px;
+      gap: 7px;
+    }
+
+    .github-username {
+      font-size: 11px;
+    }
+
+    .info-dialog {
+      max-height: 90dvh;
+      border-radius: 24px;
+    }
+
     .dialog-header {
-      padding: 18px 17px 16px;
+      padding: 15px 17px 14px;
     }
 
     .dialog-content {
       padding: 17px;
     }
 
-    .dialog-footer {
-      padding: 12px 17px;
-    }
-
-    .github-member {
-      grid-template-columns: minmax(0, 1fr) auto 16px;
-      gap: 7px;
-    }
-
-    .github-username {
-      font-size: 9px;
+    .dialog-header h2 {
+      font-size: 24px;
     }
   }
 

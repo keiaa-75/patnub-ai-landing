@@ -13,6 +13,9 @@ export function createSoundEngine() {
 
   let enabled = false;
   let disposed = false;
+  let lastTransitionAt = Number.NEGATIVE_INFINITY;
+
+  const TRANSITION_COOLDOWN = 0.34;
 
   /*
     Create the audio context only when sound is enabled.
@@ -100,7 +103,7 @@ export function createSoundEngine() {
     enabled = true;
 
     master.gain.setTargetAtTime(
-      0.22,
+      0.17,
       context.currentTime,
       0.04
     );
@@ -118,6 +121,7 @@ export function createSoundEngine() {
     enabled = false;
 
     if (context && master) {
+      master.gain.cancelScheduledValues(context.currentTime);
       master.gain.setTargetAtTime(
         0,
         context.currentTime,
@@ -147,7 +151,10 @@ export function createSoundEngine() {
   function transition(direction = 1) {
     if (!canPlay()) return;
 
+    // Avoid a flurry of tones when someone scrolls rapidly across beats.
     const now = context.currentTime;
+    if (now - lastTransitionAt < TRANSITION_COOLDOWN) return;
+    lastTransitionAt = now;
 
     const oscillator = context.createOscillator();
     const filter = context.createBiquadFilter();
@@ -158,25 +165,25 @@ export function createSoundEngine() {
     oscillator.type = 'sine';
 
     oscillator.frequency.setValueAtTime(
-      forward ? 360 : 560,
+      forward ? 420 : 560,
       now
     );
 
     oscillator.frequency.exponentialRampToValueAtTime(
-      forward ? 720 : 300,
-      now + 0.16
+      forward ? 680 : 360,
+      now + 0.13
     );
 
     filter.type = 'lowpass';
 
     filter.frequency.setValueAtTime(
-      forward ? 900 : 1400,
+      forward ? 1000 : 1300,
       now
     );
 
     filter.frequency.exponentialRampToValueAtTime(
-      forward ? 1800 : 650,
-      now + 0.17
+      forward ? 1600 : 720,
+      now + 0.14
     );
 
     gain.gain.setValueAtTime(
@@ -185,13 +192,13 @@ export function createSoundEngine() {
     );
 
     gain.gain.exponentialRampToValueAtTime(
-      0.055,
-      now + 0.035
+      0.032,
+      now + 0.025
     );
 
     gain.gain.exponentialRampToValueAtTime(
       0.0001,
-      now + 0.2
+      now + 0.145
     );
 
     oscillator.connect(filter);
@@ -199,7 +206,7 @@ export function createSoundEngine() {
     gain.connect(master);
 
     oscillator.start(now);
-    oscillator.stop(now + 0.22);
+    oscillator.stop(now + 0.16);
 
     oscillator.onended = () => {
       oscillator.disconnect();
@@ -253,14 +260,14 @@ export function createSoundEngine() {
 
       gain.gain.exponentialRampToValueAtTime(
         0.0001,
-        start + 0.32
+        start + 0.28
       );
 
       oscillator.connect(gain);
       gain.connect(master);
 
       oscillator.start(start);
-      oscillator.stop(start + 0.34);
+      oscillator.stop(start + 0.3);
 
       oscillator.onended = () => {
         oscillator.disconnect();

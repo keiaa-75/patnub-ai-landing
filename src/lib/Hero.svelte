@@ -11,7 +11,6 @@
   import Shapes from './Shapes.svelte';
 
   import { spatial, effects } from './motion.js';
-  import { createSoundEngine } from './sound.js';
 
   /*
     Story beats:
@@ -41,8 +40,6 @@
 
   const NO_SHAPES = FLAGS.has('noshapes');
   const NO_3D = FLAGS.has('no3d');
-
-  const SOUND_STORAGE_KEY = 'patnub-ai-sound';
 
   const T = (beat, fraction = 0) =>
     (beat + fraction) / BEATS;
@@ -77,10 +74,10 @@
 
   let problem;
   let tagline;
-  let featureCopy;
+  let featureCopy = $state(null);
   let downloadCopy;
 
-  let shapes;
+  let shapes = $state(null);
   let scrollHint;
 
   let phoneSlot;
@@ -96,12 +93,6 @@
   let reduced = $state(false);
   let use3d = $state(!NO_3D);
   let threeReady = $state(false);
-
-  let motionPaused = $state(false);
-  let soundEnabled = $state(false);
-
-  let soundEngine;
-  let soundUnlockHandler = null;
 
   const clamp = gsap.utils.clamp;
 
@@ -184,153 +175,7 @@
   const startShapes = () =>
     settle(() => shapes?.enter());
 
-  /*
-    Audio preference storage.
-  */
-
-  function saveSoundPreference(enabled) {
-    try {
-      localStorage.setItem(
-        SOUND_STORAGE_KEY,
-        enabled ? 'enabled' : 'disabled'
-      );
-    } catch {
-      // The current session still works without storage.
-    }
-  }
-
-  function removeSoundUnlockListeners() {
-    if (
-      !soundUnlockHandler ||
-      typeof window === 'undefined'
-    ) {
-      return;
-    }
-
-    window.removeEventListener(
-      'pointerdown',
-      soundUnlockHandler
-    );
-
-    window.removeEventListener(
-      'keydown',
-      soundUnlockHandler
-    );
-
-    soundUnlockHandler = null;
-  }
-
-  function registerSoundUnlockListeners() {
-    if (
-      typeof window === 'undefined' ||
-      soundUnlockHandler
-    ) {
-      return;
-    }
-
-    soundUnlockHandler = async () => {
-      const unlocked = await soundEngine?.unlock();
-
-      if (unlocked) {
-        removeSoundUnlockListeners();
-      }
-    };
-
-    window.addEventListener(
-      'pointerdown',
-      soundUnlockHandler,
-      { passive: true }
-    );
-
-    window.addEventListener(
-      'keydown',
-      soundUnlockHandler
-    );
-  }
-
-  /*
-    Sound control.
-
-    The AudioContext is started only after the visitor
-    explicitly enables sound.
-  */
-
-  async function toggleSound() {
-    if (soundEnabled) {
-      soundEnabled = false;
-
-      saveSoundPreference(false);
-
-      soundEngine?.disable();
-
-      removeSoundUnlockListeners();
-
-      return;
-    }
-
-    if (!soundEngine) return;
-
-    soundEnabled = true;
-
-    saveSoundPreference(true);
-
-    const available = await soundEngine.enable();
-
-    if (!available) {
-      soundEnabled = false;
-
-      saveSoundPreference(false);
-
-      return;
-    }
-
-    registerSoundUnlockListeners();
-  }
-
-  /*
-    Motion control.
-
-    Pausing the GSAP root timeline stops the scroll-driven
-    animation without disabling native scrolling.
-
-    On resume, ScrollTrigger synchronizes the animation
-    to the current scroll position.
-  */
-
-  function toggleMotion() {
-    motionPaused = !motionPaused;
-
-    gsap.globalTimeline.paused(motionPaused);
-
-    if (!motionPaused) {
-      requestAnimationFrame(() => {
-        gsap.globalTimeline.paused(false);
-
-        ScrollTrigger.update();
-      });
-    }
-  }
-
   onMount(() => {
-    /*
-      Initialize the sound engine.
-    */
-
-    soundEngine = createSoundEngine();
-
-    try {
-      soundEnabled =
-        localStorage.getItem(SOUND_STORAGE_KEY) === 'enabled';
-    } catch {
-      soundEnabled = false;
-    }
-
-    if (soundEnabled) {
-      soundEngine.enable();
-
-      registerSoundUnlockListeners();
-    }
-
     /*
       Initialize ScrollTrigger and viewport measurement.
     */
@@ -349,23 +194,23 @@
       Lazy-load the 3D device.
     */
 
-    import('./Phone3D.svelte')
-      .then((module) => {
-        Phone3DLazy = module.default;
-      })
-      .catch((error) => {
-        console.warn(
-          '[patnub.ai] Could not load 3D phone:',
-          error
-        );
-
-        use3d = false;
-
-        startShapes();
-      });
-
-    if (!use3d) {
+    if (NO_3D) {
       startShapes();
+    } else {
+      import('./Phone3D.svelte')
+        .then((module) => {
+          Phone3DLazy = module.default;
+        })
+        .catch((error) => {
+          console.warn(
+            '[patnub.ai] Could not load 3D phone:',
+            error
+          );
+
+          use3d = false;
+
+          startShapes();
+        });
     }
 
     /*
@@ -386,7 +231,7 @@
       */
 
       const landscapeScale = isDesktop ? 1.08 : 0.88;
-      const landscapeY = isDesktop ? -0.065 : -0.045;
+      const landscapeY = isDesktop ? 0.04 : -0.045;
 
       const pose = {
         xVw: isDesktop ? -0.66 : -0.72,
@@ -543,35 +388,19 @@
             : undefined,
 
           onUpdate: (self) => {
-            if (motionPaused) return;
-
             const currentBeat = Math.round(
               self.progress * BEATS
             );
 
             /*
-              Expressive shape reactions and sound effects
-              occur only when a beat changes.
+              Expressive shape reactions occur only when a beat changes.
             */
 
             if (currentBeat !== lastBeat) {
-              const direction =
-                currentBeat > lastBeat ? 1 : -1;
-
               lastBeat = currentBeat;
 
               shapes?.goTo(currentBeat);
 
-              if (soundEnabled) {
-                if (
-                  currentBeat === DOWNLOAD_BEAT &&
-                  direction > 0
-                ) {
-                  soundEngine?.landing();
-                } else {
-                  soundEngine?.transition(direction);
-                }
-              }
             }
 
             wobble.target = clamp(
@@ -1112,7 +941,7 @@
       */
 
       const render = () => {
-        if (!active || motionPaused) return;
+        if (!active) return;
 
         syncStory();
 
@@ -1149,8 +978,8 @@
 
             z: pose.z,
 
-            rotationY: yaw,
-            rotationX: pitch,
+            rotationY: yaw + (use3d ? 0 : -6),
+            rotationX: pitch + (use3d ? 0 : 2.5),
             rotationZ: roll,
 
             scale
@@ -1196,7 +1025,7 @@
 
           phoneSlot.style.setProperty(
             '--glass-pos',
-            `${50 + Math.cos(radians) * 38}%`
+            `${50 + Math.sin(radians) * 18}%`
           );
         }
 
@@ -1278,8 +1107,7 @@
 
       const onPointer = (event) => {
         if (
-          event.pointerType === 'touch' ||
-          motionPaused
+          event.pointerType === 'touch'
         ) {
           return;
         }
@@ -1441,9 +1269,6 @@
         updateDeviceHeight
       );
 
-      removeSoundUnlockListeners();
-
-      soundEngine?.dispose();
     };
   });
 </script>
@@ -1459,7 +1284,6 @@
   <div
     class="stage"
     bind:this={stage}
-    class:motion-paused={motionPaused}
   >
     <!-- Backdrops -->
     <div class="backdrop" aria-hidden="true">
@@ -1475,16 +1299,15 @@
 
     <!-- Opening question -->
     <div class="copy problem scheme-peach" bind:this={problem}>
-      <h1>Do you ever wish understanding your health was easier?</h1>
+      <h1>Want to understand your health better?</h1>
     </div>
 
     <!-- Hero -->
     <div class="copy tagline scheme-teal" bind:this={tagline}>
-      <h2>Your doctor’s note, in plain words.</h2>
+      <h2>Say hi to patnub.ai</h2>
 
       <p class="sub">
-        patnub.ai keeps your clinician’s instructions on your phone
-        and explains them in plain language, even offline.
+        Explore health topics, understand medicines, and keep important health information close. Use it online or offline.
       </p>
     </div>
 
@@ -1599,12 +1422,7 @@
 </section>
 
 <!-- Floating controls stay outside the clipped scroll stage. -->
-<FloatingControls
-  motionPaused={motionPaused}
-  soundEnabled={soundEnabled}
-  onToggleMotion={toggleMotion}
-  onToggleSound={toggleSound}
-/>
+<FloatingControls />
 
 <style>
   /*
@@ -1630,18 +1448,6 @@
     perspective-origin: 50% 50%;
 
     isolation: isolate;
-  }
-
-  /*
-    Pause CSS animations and transitions when the visitor
-    uses the motion control.
-
-    GSAP is paused separately in the script.
-  */
-
-  .stage.motion-paused :global(*) {
-    animation-play-state: paused !important;
-    transition: none !important;
   }
 
   /* Color schemes */

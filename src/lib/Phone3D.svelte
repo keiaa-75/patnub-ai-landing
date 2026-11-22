@@ -6,6 +6,11 @@
   import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
   import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
+  import {
+    createBrewCodeArtworkSurface,
+    waitForBrewCodeArtworkFonts
+  } from './brewCodeArtwork.js';
+
   let {
     screens = [],
     phoneHeight = 420,
@@ -24,40 +29,12 @@
 
   const SCREEN_LIFT_LOCAL = 0.008;
 
-  const TEAM = [
-    {
-      name: 'Marlon Isaguirre',
-      role: 'Project Lead',
-      initials: 'MI',
-      username: 'SussyMarlony',
-      bg: '#d5f1e9',
-      ink: '#145d52'
-    },
-    {
-      name: 'Julian Macato',
-      role: 'Full-Stack Developer',
-      initials: 'JM',
-      username: 'fancybaby404',
-      bg: '#f8e5d1',
-      ink: '#765132'
-    },
-    {
-      name: 'Ravin Aguelo',
-      role: 'Runtime Engineer',
-      initials: 'RA',
-      username: 'RavinEduard',
-      bg: '#e0eafa',
-      ink: '#445f83'
-    },
-    {
-      name: 'Jill Abarte',
-      role: 'Backend Developer',
-      initials: 'JA',
-      username: 'keiaa-75',
-      bg: '#eee0f1',
-      ink: '#74507e'
-    }
-  ];
+  let brewCodeArtworkSurface = null;
+  let brewCodeArtworkTexture = null;
+  let lastArtworkFrame = 0;
+  let prefersReducedMotion = false;
+  let reducedMotionQuery = null;
+  let reducedMotionHandler = null;
 
   let renderer;
   let scene;
@@ -101,330 +78,76 @@
   };
 
   /*
-    Load a public GitHub avatar.
+    Create the final BrewCode artwork texture from the shared 2D renderer.
 
-    CORS is enabled so that successful images can also
-    be drawn into the generated WebGL canvas texture.
-
-    If an avatar cannot be loaded, the card uses initials.
+    The same drawing function is used by the CSS fallback. The texture
+    canvas is rotated into the portrait orientation expected by the
+    Samsung display mesh, while its drawing coordinates remain landscape.
   */
-
-  function loadAvatar(username) {
-    return new Promise((resolve) => {
-      const image = new Image();
-
-      image.crossOrigin = 'anonymous';
-      image.referrerPolicy = 'no-referrer';
-
-      let settled = false;
-
-      const timeout = setTimeout(() => {
-        finish(null);
-      }, 4000);
-
-      function finish(result) {
-        if (settled) return;
-
-        settled = true;
-
-        clearTimeout(timeout);
-
-        resolve(result);
-      }
-
-      image.onload = () => {
-        finish(image);
-      };
-
-      image.onerror = () => {
-        finish(null);
-      };
-
-      image.src =
-        `https://github.com/${username}.png?size=256`;
-    });
-  }
-
-  /*
-    Draw a fallback initial when the profile photo
-    cannot be retrieved or drawn into the canvas.
-  */
-
-  function drawInitials(
-    ctx,
-    member,
-    centerX,
-    centerY,
-    avatarSize
-  ) {
-    ctx.fillStyle = member.ink;
-
-    ctx.font = '600 82px Arial, sans-serif';
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    ctx.fillText(
-      member.initials,
-      centerX,
-      centerY,
-      avatarSize - 30
-    );
-  }
-
-  /*
-    Generate the four landscape profile cards.
-
-    The inner coordinate system is 2340 × 1080.
-    It is rotated into the portrait texture used by
-    the original Samsung display mesh.
-
-    No application header, navigation, footer, or
-    unrelated information is rendered here.
-  */
-
-  async function createTeamTexture() {
-    const avatars = await Promise.all(
-      TEAM.map((member) =>
-        loadAvatar(member.username)
-      )
-    );
+  async function createBrewCodeTexture() {
+    await waitForBrewCodeArtworkFonts();
 
     if (disposed) return null;
 
-    const canvas = document.createElement('canvas');
-
-    canvas.width = 1080;
-    canvas.height = 2340;
-
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      throw new Error(
-        'Could not create the team profile canvas.'
-      );
-    }
-
-    /*
-      Rotate the canvas coordinate system into landscape.
-    */
-
-    ctx.save();
-
-    ctx.translate(1080, 0);
-    ctx.rotate(Math.PI / 2);
-
-    ctx.fillStyle = '#f5faf8';
-
-    ctx.fillRect(
-      0,
-      0,
-      2340,
-      1080
-    );
-
-    const cardWidth = 500;
-    const cardHeight = 930;
-
-    const firstX = 110;
-    const cardGap = 540;
-
-    const cardY = 75;
-
-    TEAM.forEach((member, index) => {
-      const x = firstX + index * cardGap;
-
-      const centerX = x + cardWidth / 2;
-
-      /*
-        Profile card surface.
-      */
-
-      ctx.save();
-
-      ctx.shadowColor = 'rgba(27, 58, 49, 0.045)';
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetY = 5;
-
-      ctx.beginPath();
-
-      ctx.roundRect(
-        x,
-        cardY,
-        cardWidth,
-        cardHeight,
-        42
-      );
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
-
-      ctx.restore();
-
-      ctx.beginPath();
-
-      ctx.roundRect(
-        x,
-        cardY,
-        cardWidth,
-        cardHeight,
-        42
-      );
-
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#dce9e3';
-
-      ctx.stroke();
-
-      /*
-        Portrait.
-
-        The image is cropped to a centered square
-        and clipped into a circle.
-      */
-
-      const centerY = cardY + 320;
-
-      const avatarSize = 270;
-      const radius = avatarSize / 2;
-
-      const avatarX = centerX - radius;
-      const avatarY = centerY - radius;
-
-      const avatar = avatars[index];
-
-      ctx.save();
-
-      ctx.beginPath();
-
-      ctx.arc(
-        centerX,
-        centerY,
-        radius,
-        0,
-        Math.PI * 2
-      );
-
-      ctx.clip();
-
-      ctx.fillStyle = member.bg;
-
-      ctx.fillRect(
-        avatarX,
-        avatarY,
-        avatarSize,
-        avatarSize
-      );
-
-      let avatarDrawn = false;
-
-      if (avatar) {
-        try {
-          const width =
-            avatar.naturalWidth || avatar.width;
-
-          const height =
-            avatar.naturalHeight || avatar.height;
-
-          const cropSize = Math.min(width, height);
-
-          const cropX = (width - cropSize) / 2;
-          const cropY = (height - cropSize) / 2;
-
-          ctx.drawImage(
-            avatar,
-
-            cropX,
-            cropY,
-            cropSize,
-            cropSize,
-
-            avatarX,
-            avatarY,
-            avatarSize,
-            avatarSize
-          );
-
-          avatarDrawn = true;
-
-        } catch (error) {
-          console.warn(
-            `[patnub.ai] Could not draw ${member.username}'s avatar:`,
-            error
-          );
-        }
-      }
-
-      if (!avatarDrawn) {
-        drawInitials(
-          ctx,
-          member,
-          centerX,
-          centerY,
-          avatarSize
-        );
-      }
-
-      ctx.restore();
-
-      /*
-        Name.
-      */
-
-      ctx.fillStyle = '#192923';
-
-      ctx.font = '700 36px Arial, sans-serif';
-
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      ctx.fillText(
-        member.name,
-        centerX,
-        cardY + 665,
-        cardWidth - 42
-      );
-
-      /*
-        Role.
-      */
-
-      ctx.fillStyle = '#62766e';
-
-      ctx.font = '500 26px Arial, sans-serif';
-
-      ctx.fillText(
-        member.role,
-        centerX,
-        cardY + 745,
-        cardWidth - 42
-      );
+    brewCodeArtworkSurface = createBrewCodeArtworkSurface(null, {
+      portraitTexture: true
     });
 
-    ctx.restore();
+    brewCodeArtworkSurface.draw(0, false);
 
-    /*
-      Create the GPU texture.
-    */
-
-    const texture = new THREE.CanvasTexture(canvas);
+    const texture = new THREE.CanvasTexture(
+      brewCodeArtworkSurface.canvas
+    );
 
     texture.colorSpace = THREE.SRGBColorSpace;
-
     texture.anisotropy = Math.min(
       8,
       renderer.capabilities.getMaxAnisotropy()
     );
-
-    texture.minFilter =
-      THREE.LinearMipmapLinearFilter;
-
+    // This canvas is redrawn while visible; skip per-frame mipmap regeneration.
+    texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
-
-    texture.generateMipmaps = true;
+    texture.generateMipmaps = false;
     texture.needsUpdate = true;
 
+    texture.userData.isBrewCodeArtwork = true;
+    brewCodeArtworkTexture = texture;
+    lastArtworkFrame = 0;
+
     return texture;
+  }
+
+  /*
+    Animate the shared canvas only while the final display screen is active.
+    Hero's GSAP ticker already calls setPose while the phone is in view, so
+    this does not require a second render loop or a larger renderer rewrite.
+  */
+  function updateBrewCodeArtwork(value) {
+    if (
+      !brewCodeArtworkSurface ||
+      !brewCodeArtworkTexture ||
+      prefersReducedMotion ||
+      !textures.length
+    ) {
+      return;
+    }
+
+    const finalScreenIndex = textures.length - 1;
+    const artworkIsVisible = value >= finalScreenIndex - 0.015;
+
+    if (!artworkIsVisible) {
+      lastArtworkFrame = 0;
+      return;
+    }
+
+    const now = performance.now();
+    const frameInterval = 1000 / 24;
+
+    if (now - lastArtworkFrame < frameInterval) return;
+
+    brewCodeArtworkSurface.draw(now / 1000, true);
+    brewCodeArtworkTexture.needsUpdate = true;
+    lastArtworkFrame = now;
   }
 
   /*
@@ -618,6 +341,7 @@
     );
 
     updateScreen(pose.screenF || 0);
+    updateBrewCodeArtwork(pose.screenF || 0);
 
     render();
   }
@@ -805,7 +529,7 @@
   /*
     Load application textures.
 
-    The final "team-profiles" value generates a canvas texture
+    The final "brewcode-artwork" value uses the shared canvas renderer
     rather than requesting a URL.
   */
 
@@ -827,8 +551,8 @@
     try {
       const loaded = await Promise.all(
         urls.map((url) => {
-          if (url === 'team-profiles') {
-            return createTeamTexture();
+          if (url === 'brewcode-artwork') {
+            return createBrewCodeTexture();
           }
 
           return loader.loadAsync(url);
@@ -853,7 +577,7 @@
       textures = loaded.map((texture) => {
         if (!texture) {
           throw new Error(
-            'The team profile texture could not be created.'
+            'The BrewCode artwork texture could not be created.'
           );
         }
 
@@ -864,12 +588,14 @@
           renderer.capabilities.getMaxAnisotropy()
         );
 
-        texture.minFilter =
-          THREE.LinearMipmapLinearFilter;
+        const isAnimatedArtwork = Boolean(texture.userData?.isBrewCodeArtwork);
+
+        texture.minFilter = isAnimatedArtwork
+          ? THREE.LinearFilter
+          : THREE.LinearMipmapLinearFilter;
 
         texture.magFilter = THREE.LinearFilter;
-
-        texture.generateMipmaps = true;
+        texture.generateMipmaps = !isAnimatedArtwork;
         texture.needsUpdate = true;
 
         return texture;
@@ -932,6 +658,19 @@
   */
 
   onMount(() => {
+    reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    prefersReducedMotion = reducedMotionQuery.matches;
+    reducedMotionHandler = (event) => {
+      prefersReducedMotion = event.matches;
+      if (prefersReducedMotion && brewCodeArtworkSurface) {
+        brewCodeArtworkSurface.draw(0, false);
+        if (brewCodeArtworkTexture) brewCodeArtworkTexture.needsUpdate = true;
+        render();
+      }
+      lastArtworkFrame = 0;
+    };
+    reducedMotionQuery.addEventListener?.('change', reducedMotionHandler);
+
     try {
       /*
         Verify that WebGL 2 exists.
@@ -1178,10 +917,14 @@
       textureLoadId += 1;
 
       resizeObserver?.disconnect();
+      reducedMotionQuery?.removeEventListener?.('change', reducedMotionHandler);
 
       textures.forEach((texture) =>
         texture?.dispose()
       );
+
+      brewCodeArtworkTexture = null;
+      brewCodeArtworkSurface = null;
 
       screenGeometry?.dispose();
       screenB?.geometry?.dispose();

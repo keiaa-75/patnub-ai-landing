@@ -242,12 +242,14 @@
       const restScale = isDesktop ? 1 : 0.88;
 
       /*
-        The landscape phone sits slightly above
+        The landscape phone rests slightly below
         the vertical midpoint of the viewport.
       */
 
       const landscapeScale = isDesktop ? 1.08 : 0.88;
-      const landscapeY = isDesktop ? 0.04 : -0.045;
+      const landscapeY = isDesktop
+        ? (window.innerHeight <= 680 ? 0.20 : 0.23)
+        : (window.innerHeight <= 680 ? 0.095 : 0.10);
 
       const pose = {
         xVw: isDesktop ? -0.66 : -0.72,
@@ -547,8 +549,8 @@
       /*
         FINAL TRANSITION
 
-        The phone moves upward, centers itself, and rotates
-        into landscape orientation.
+        The phone moves toward the horizontal center, settles
+        into its lower resting position, and rotates into landscape.
 
         The phone and screen transitions both finish
         by approximately beat 5.6, leaving a short
@@ -1713,7 +1715,7 @@
   .download-copy {
     inset-block: auto;
 
-    top: clamp(22px, 3.5svh, 42px);
+    top: clamp(132px, 18svh, 154px);
 
     right: 0;
     left: 0;
@@ -2201,7 +2203,7 @@
     }
 
     .download-copy {
-      top: 22px;
+      top: 68px;
       left: 5%;
 
       width: 90%;
@@ -2285,6 +2287,10 @@
   */
 
   @media (max-height: 680px) {
+    .download-copy {
+      top: clamp(86px, 14svh, 100px);
+    }
+
     .problem {
       inset-block:
         clamp(55px, 9svh, 75px)
@@ -2304,6 +2310,10 @@
   }
 
   @media (max-width: 767px) and (max-height: 680px) {
+    .download-copy {
+      top: 54px;
+    }
+
     .problem h1 {
       font-size: clamp(2rem, 9vw, 2.8rem);
     }

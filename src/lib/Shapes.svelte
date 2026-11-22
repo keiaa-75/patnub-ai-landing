@@ -17,9 +17,10 @@
     -----
     desktop  Original behaviour. Sized from the stage height, hidden below
              641px, with scroll parallax.
-    mobile   Used by MobileExperience. The layer is fixed to the viewport,
-             sized from the shorter viewport side, and has one layout per
-             scene. There is no parallax; goTo(scene) moves the shapes.
+    mobile   Used by MobileExperience for the opening scene only. The layer
+             is fixed to the viewport, sized from the shorter viewport side,
+             and holds a single layout. There is no parallax, and goTo() does
+             nothing, because the shapes never change layout.
 
     Performance notes:
       - Continuous spinning and swaying run as CSS animations on promoted
@@ -137,67 +138,20 @@
   ];
 
   /*
-    Mobile: one layout per scene, in this order.
-      0  Opening question   peach
-      1  Say hi             teal
-      2  Ask in plain lang. mint
-      3  More features      cream
-      4  Download + credit  soft mint
+    Mobile: the single layout used behind the opening scene (peach).
 
-    Shapes hug the edges and corners so they frame the cards instead of
-    sitting under the text. Sizes are fractions of the shorter viewport side.
+    Shapes hug the edges and corners so they frame the headline instead of
+    sitting under it. Sizes are fractions of the shorter viewport side.
   */
-  const MOBILE_LAYOUTS = [
-    [
-      L(0.92, 0.14, 0.9, 15, '#f6c898'),
-      L(0.04, 0.88, 0.8, -10, '#ffe9d2'),
-      L(0.98, 0.74, 0.5, 20, '#e9b07a'),
-      L(0.08, 0.2, 0.34, -20, '#f9d3ae'),
-      OFF(0.5, 1.15, '#ffe9d2'),
-      OFF(0.7, 0.5, '#f9d3ae'),
-      L(0.2, 0.62, 1, 35, '#d99a62'),
-      L(0.82, 0.36, 1, -25, '#d99a62')
-    ],
-    [
-      L(0.9, 0.1, 0.9, 0, '#17796c'),
-      L(0.02, 0.52, 0.6, 10, '#0b5148'),
-      L(0.96, 0.9, 0.7, -15, '#2f8f82'),
-      L(0.2, 0.06, 0.3, 25, '#ffddbd'),
-      L(0.62, 0.97, 0.4, 0, '#1f8173'),
-      OFF(0.5, 0.45, '#9adbcb'),
-      L(0.08, 0.22, 1, 30, '#ffddbd'),
-      L(0.93, 0.58, 1, -20, '#9adbcb')
-    ],
-    [
-      L(0.06, 0.06, 0.8, 0, '#cdeee4'),
-      L(0.98, 0.5, 0.7, -8, '#ffe3c9'),
-      L(0.02, 0.92, 0.6, 18, '#c6e6dc'),
-      L(0.9, 0.04, 0.3, -18, '#ffddbd'),
-      L(0.7, 0.98, 0.45, 0, '#d5e8e1'),
-      OFF(0.4, 0.5, '#c9eee5'),
-      L(0.94, 0.88, 1, 30, '#9adbcb'),
-      L(0.06, 0.5, 1, -30, '#ffddbd')
-    ],
-    [
-      L(0.96, 0.1, 0.7, 0, '#ffddbd'),
-      L(0.0, 0.42, 0.6, 20, '#ffe0c2'),
-      L(0.95, 0.62, 0.55, -12, '#c9eee5'),
-      L(0.1, 0.94, 0.5, 30, '#f9d3ae'),
-      L(0.9, 0.97, 0.4, 0, '#d5e8e1'),
-      L(0.05, 0.08, 0.35, 10, '#c9eee5'),
-      L(0.5, 0.02, 1, 60, '#e9b07a'),
-      L(0.97, 0.3, 1, -40, '#9adbcb')
-    ],
-    [
-      L(0.04, 0.08, 0.8, 0, '#bfe5d9'),
-      L(0.98, 0.3, 0.6, -10, '#ffddbd'),
-      L(0.0, 0.62, 0.5, 15, '#cde8df'),
-      L(0.9, 0.02, 0.28, 20, '#ffe0c2'),
-      L(0.1, 0.97, 0.5, 0, '#9adbcb'),
-      L(0.98, 0.92, 0.5, 10, '#ffddbd'),
-      L(0.03, 0.5, 1, 35, '#9adbcb'),
-      L(0.96, 0.5, 1, -30, '#ffddbd')
-    ]
+  const MOBILE_LAYOUT = [
+    L(0.92, 0.14, 0.9, 15, '#f6c898'),
+    L(0.04, 0.88, 0.8, -10, '#ffe9d2'),
+    L(0.98, 0.74, 0.5, 20, '#e9b07a'),
+    L(0.08, 0.2, 0.34, -20, '#f9d3ae'),
+    OFF(0.5, 1.15, '#ffe9d2'),
+    OFF(0.7, 0.5, '#f9d3ae'),
+    L(0.2, 0.62, 1, 35, '#d99a62'),
+    L(0.82, 0.36, 1, -25, '#d99a62')
   ];
 
   // Each element is as big as the largest size its shape ever uses, and is
@@ -206,9 +160,7 @@
     Math.max(PEACH[i].k, TEAL[i].k, WHITE[i].k)
   );
 
-  const MOBILE_SIZE = SHAPES.map((_, i) =>
-    Math.max(...MOBILE_LAYOUTS.map((layout) => layout[i].k))
-  );
+  const MOBILE_SIZE = SHAPES.map((_, i) => MOBILE_LAYOUT[i].k);
 
   const SIZE = $derived(mobile ? MOBILE_SIZE : DESKTOP_SIZE);
 
@@ -219,10 +171,7 @@
   ];
 
   const layoutFor = (beat) => {
-    if (mobile) {
-      const last = MOBILE_LAYOUTS.length - 1;
-      return MOBILE_LAYOUTS[Math.max(0, Math.min(beat, last))];
-    }
+    if (mobile) return MOBILE_LAYOUT;
 
     if (beat <= 0) return PEACH;
     if (beat === 1) return TEAL;
@@ -294,7 +243,8 @@
         const pose = {
           x: l.x * size.w,
           y: l.y * size.h,
-          scale: l.k / SIZE[i],
+          // A shape that is never shown has a size of 0; keep it collapsed.
+          scale: SIZE[i] ? l.k / SIZE[i] : 0,
           rotation: l.r
         };
 
@@ -400,6 +350,9 @@
     api.enter = enter;
 
     api.goTo = (beat) => {
+      // Mobile keeps one layout, so there is nothing to move between.
+      if (mobile) return;
+
       if (!entered) {
         current = beat;
         return;
@@ -474,8 +427,8 @@
   }
 
   /*
-    Mobile: one fixed layer behind every scene. The scenes are transparent,
-    so the shapes persist and move between scenes as a single system.
+    Mobile: one fixed layer behind the opening scene. The scenes are
+    transparent, so the shapes frame the headline.
   */
   .shapes.mobile {
     position: fixed;

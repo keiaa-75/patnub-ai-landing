@@ -15,17 +15,19 @@
 
     Structure
     ---------
-    - One fixed backdrop and one fixed shapes layer sit behind every scene.
-      The scenes are transparent, so the backdrop colour and the shapes
-      change as one system while the user scrolls.
+    - One fixed backdrop sits behind every scene. The scenes are
+      transparent, so the backdrop colour changes as the user scrolls.
+    - Animated shapes belong to the opening scene only. They stay on the
+      first layout, fade out once the user leaves scene 0, and fade back in
+      when they return.
     - Three IntersectionObservers drive everything. There is no scroll
       scrubbing and no pinning.
         enter      a scene's top has risen into view -> play its animation
         active     a scene crosses the middle of the viewport -> recolour
-                   the backdrop and move the shapes
+                   the backdrop
         offscreen  a scene is completely out of view -> reset it, so the
                    animation replays the next time it comes back
-    - Reduced motion: no shapes, no slides, no typing. Text is shown in full.
+    - Reduced motion: no slides, no typing. Text is shown in full.
   */
 
   const MARK_SRC = '/screens/nurse-mark.svg';
@@ -266,10 +268,7 @@
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return;
 
-          const index = sceneIndex(entry.target);
-
-          active = index;
-          shapes?.goTo(index);
+          active = sceneIndex(entry.target);
         });
       });
 
@@ -304,8 +303,11 @@
     aria-hidden="true"
   ></div>
 
+  <!-- Shapes live in the opening scene only. -->
   {#if !reduced}
-    <Shapes bind:this={shapes} mode="mobile" beats={BACKDROPS.length - 1} />
+    <div class="shapes-layer" class:away={active !== 0} aria-hidden="true">
+      <Shapes bind:this={shapes} mode="mobile" beats={1} />
+    </div>
   {/if}
 
   <!-- Scene 0: opening question -->
@@ -437,8 +439,6 @@
     aria-label="Download patnub.ai"
   >
     <article class="download-card reveal reveal-pop" style="--i: 0">
-      <span class="download-blob" aria-hidden="true"></span>
-
       <div class="download-body">
         <h2>Take patnub.ai with you.</h2>
 
@@ -486,7 +486,7 @@
     font-family: var(--font-body);
   }
 
-  /* Fixed layers: backdrop (0), shapes (1), scenes (2). */
+  /* Fixed layers: backdrop (0), opening-scene shapes (1), scenes (2). */
 
   .backdrop {
     position: fixed;
@@ -495,6 +495,27 @@
     pointer-events: none;
     background-color: #ffddbd;
     transition: background-color 700ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  /*
+    Fades the shapes out when the user leaves the opening scene.
+    Effects (opacity) never overshoot. Visibility switches off after the
+    fade so the hidden layer costs nothing to paint.
+  */
+  .shapes-layer {
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity 520ms cubic-bezier(0.2, 0, 0, 1),
+      visibility 0s linear 0s;
+  }
+
+  .shapes-layer.away {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 520ms cubic-bezier(0.2, 0, 0, 1),
+      visibility 0s linear 520ms;
   }
 
   .scene {
@@ -963,24 +984,6 @@
     color: #f5fbf8;
   }
 
-  .download-blob {
-    position: absolute;
-    top: -70px;
-    right: -80px;
-    width: 250px;
-    aspect-ratio: 1;
-
-    border-radius: 43% 57% 55% 45% / 48% 42% 58% 52%;
-    background: #17796c;
-
-    animation: blob-turn 60s linear infinite;
-    pointer-events: none;
-  }
-
-  @keyframes blob-turn {
-    to { transform: rotate(360deg); }
-  }
-
   .download-body {
     position: relative;
   }
@@ -1149,6 +1152,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .backdrop,
+    .shapes-layer,
     .reveal,
     .bubble,
     .download-button,
@@ -1169,8 +1173,7 @@
     }
 
     .caret,
-    .scroll-hint .material-symbols-rounded,
-    .download-blob {
+    .scroll-hint .material-symbols-rounded {
       animation: none;
     }
   }

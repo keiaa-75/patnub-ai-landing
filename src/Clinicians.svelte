@@ -27,13 +27,6 @@
 
   <main>
     <section class="hero" aria-labelledby="page-title">
-      <div class="eyebrow">
-        <span class="material-symbols-rounded" aria-hidden="true">
-          stethoscope
-        </span>
-        Clinician workspace
-      </div>
-
       <h1 id="page-title">
         A clearer handoff from <span>clinic to patient.</span>
       </h1>
@@ -51,8 +44,6 @@
       </div>
     </section>
   </main>
-
-  <footer>patnub.ai · Care that stays with you.</footer>
 </div>
 
 <style>
@@ -61,20 +52,24 @@
     --font-body: 'Roboto', system-ui, sans-serif;
     --primary: #0e8f7e;
     --primary-strong: #0b796b;
-    --primary-container: #c9eee5;
-    --on-primary-container: #073d35;
     --surface: #f5faf8;
     --ink: #17231f;
     --muted: #52645e;
     --outline: #d1ddd7;
 
     position: relative;
-    display: flex;
-    min-height: 100vh;
-    min-height: 100svh;
-    flex-direction: column;
-    isolation: isolate;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+
+    width: 100%;
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+
+    min-height: 0;
     overflow: hidden;
+    isolation: isolate;
+
     background: var(--surface);
     color: var(--ink);
     font-family: var(--font-body);
@@ -99,6 +94,8 @@
     font-feature-settings: 'liga';
     -webkit-font-smoothing: antialiased;
   }
+
+  /* Background elements */
 
   .ambient {
     position: absolute;
@@ -127,13 +124,16 @@
     transform: rotate(21deg);
   }
 
+  /* Header */
+
   header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: min(1160px, calc(100% - 56px));
-    margin: 0 auto;
-    padding: 28px 0;
+
+    width: min(1160px, calc(100% - 48px));
+    margin-inline: auto;
+    padding-block: clamp(10px, 1.8vh, 18px);
   }
 
   .brand {
@@ -153,11 +153,15 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
+
     color: var(--muted);
     font-size: 14px;
     font-weight: 600;
     text-decoration: none;
-    transition: color 160ms ease, transform 160ms ease;
+
+    transition:
+      color 160ms ease,
+      transform 160ms ease;
   }
 
   .back-link:hover {
@@ -165,11 +169,14 @@
     transform: translateX(-2px);
   }
 
+  /* Main content */
+
   main {
     display: grid;
-    flex: 1;
+    min-height: 0;
     place-items: center;
-    padding: 54px 28px 104px;
+
+    padding-inline: clamp(20px, 4vw, 48px);
   }
 
   .hero {
@@ -177,33 +184,16 @@
     text-align: center;
   }
 
-  .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 15px;
-    border: 1px solid rgba(14, 143, 126, 0.12);
-    border-radius: 999px;
-    background: var(--primary-container);
-    color: var(--on-primary-container);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  .eyebrow .material-symbols-rounded {
-    font-size: 17px;
-  }
-
   h1 {
-    max-width: 15ch;
-    margin: 28px auto 18px;
+    max-width: 16ch;
+    margin: 0 auto 18px;
+
     font-family: var(--font-display);
-    font-size: clamp(3rem, 8vw, 6.3rem);
+    font-size: clamp(2.55rem, min(7.5vw, 10vh), 6.3rem);
     font-weight: 600;
     letter-spacing: -0.055em;
     line-height: 0.98;
+
     text-wrap: balance;
   }
 
@@ -214,9 +204,11 @@
   .intro {
     max-width: 54ch;
     margin: 0 auto;
+
     color: var(--muted);
-    font-size: clamp(1rem, 2vw, 1.13rem);
-    line-height: 1.7;
+    font-size: clamp(0.95rem, 1.6vw, 1.1rem);
+    line-height: 1.55;
+
     text-wrap: pretty;
   }
 
@@ -224,14 +216,19 @@
     display: inline-flex;
     align-items: center;
     gap: 9px;
-    margin-top: 34px;
-    padding: 13px 18px;
+
+    margin-top: clamp(18px, 3vh, 26px);
+    padding: 11px 16px;
+
     border: 1px solid var(--outline);
     border-radius: 18px;
+
     background: rgba(255, 255, 255, 0.78);
     color: var(--muted);
+
     font-size: 13px;
     font-weight: 600;
+
     box-shadow: 0 10px 28px rgba(27, 58, 49, 0.05);
   }
 
@@ -240,17 +237,11 @@
     font-size: 19px;
   }
 
-  footer {
-    padding: 0 24px 28px;
-    color: #71817b;
-    font-size: 12px;
-    text-align: center;
-  }
+  /* Responsive */
 
   @media (max-width: 600px) {
     header {
       width: calc(100% - 36px);
-      padding: 20px 0;
     }
 
     .brand {
@@ -258,15 +249,17 @@
     }
 
     .back-link {
+      gap: 5px;
       font-size: 12px;
     }
 
-    main {
-      padding: 45px 20px 76px;
+    .hero {
+      width: 100%;
     }
 
     h1 {
-      margin-top: 24px;
+      max-width: 13ch;
+      font-size: clamp(2.5rem, 11vw, 3.8rem);
     }
 
     .intro {
@@ -274,7 +267,42 @@
     }
 
     .status {
-      margin-top: 28px;
+      max-width: 100%;
+      padding: 11px 13px;
+      font-size: 12px;
+    }
+  }
+
+  /* Short viewports */
+
+  @media (max-height: 700px) {
+    header {
+      padding-block: 10px;
+    }
+
+    h1 {
+      margin-bottom: 14px;
+    }
+
+    .status {
+      margin-top: 18px;
+    }
+  }
+
+  @media (max-height: 520px) {
+    h1 {
+      font-size: clamp(1.9rem, 6vh, 3.1rem);
+      margin-bottom: 10px;
+    }
+
+    .intro {
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .status {
+      margin-top: 12px;
+      padding: 9px 12px;
     }
   }
 

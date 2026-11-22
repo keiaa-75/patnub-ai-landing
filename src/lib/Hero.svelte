@@ -1,4 +1,3 @@
-
 <script>
   import { onMount, tick } from 'svelte';
 
@@ -13,6 +12,7 @@
   import MobileExperience from './MobileExperience.svelte';
 
   import { spatial, effects } from './motion.js';
+  import { computeLayout } from './layout.js';
 
   /*
     Story beats:
@@ -139,29 +139,34 @@
   /*
     Phone dimensions.
 
-    On desktop, the device is limited by the viewport width
-    and height. On mobile, it uses a smaller proportion to
-    leave room for the download heading and button.
+    Portrait tablets get a larger device that shares the viewport
+    with the feature copy. Landscape tablets and desktop retain their
+    own sizing rules; mobile does not mount the phone at all.
   */
 
-  const getDeviceHeight = () => {
-    if (typeof window === 'undefined') return 420;
+  /*
+    All sizing and anchor points come from layout.js. `geometry` is
+    refreshed whenever the viewport or layout mode changes.
+  */
 
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-
-    if (layoutMode === 'tablet-portrait') {
-      return Math.min(height * 0.32, width * 0.54, 430);
+  const getGeometry = () => {
+    if (typeof window === 'undefined') {
+      return computeLayout('desktop', 1280, 720);
     }
 
-    if (layoutMode === 'tablet-landscape') {
-      return Math.min(height * 0.58, width * 0.38, 460);
-    }
-
-    return Math.min(height * 0.72, width * 0.78, 680);
+    return computeLayout(
+      layoutMode,
+      window.innerWidth,
+      window.innerHeight
+    );
   };
 
-  let deviceHeight = $state(getDeviceHeight());
+  let geometry = $state(getGeometry());
+  let deviceHeight = $derived(geometry.deviceHeight);
+
+  // Hidden copies of every feature block, used only to measure the
+  // tallest one in portrait so the phone never shifts between beats.
+  let featureProbes = $state([]);
 
   /*
     Application screen order:
@@ -203,7 +208,7 @@
   ];
 
   function updateDeviceHeight() {
-    deviceHeight = getDeviceHeight();
+    geometry = getGeometry();
   }
 
   function ensurePhone3D() {
@@ -292,35 +297,29 @@
 
       reduced = false;
 
-      const restX = isTabletPortrait ? 0 : isDesktop ? 0.22 : 0.19;
-      const featureX = isTabletPortrait ? 0 : isDesktop ? -0.22 : -0.19;
-
-      const restScale = isTabletPortrait ? 0.82 : isDesktop ? 1 : 0.9;
-
       /*
-        Portrait tablets keep the phone in the upper half while
-        feature copy occupies a dedicated band below it. Landscape
-        tablets retain the compact two-column product composition.
+        Geometry comes from layout.js and is re-read on every measure().
+        Tablet layouts then refine the vertical placement from the real
+        height of the copy (see placeTabletGroups).
       */
 
-      const landscapeScale = isTabletPortrait ? 0.82 : isDesktop ? 1.08 : 0.9;
-      const landscapeY = isTabletPortrait
-        ? -0.12
-        : isDesktop
-          ? (window.innerHeight <= 680 ? 0.20 : 0.23)
-          : (window.innerHeight <= 680 ? 0.095 : 0.10);
+      let g = geometry;
+
+      let finalY = g.finalY;
+
+      let story = null;
 
       const pose = {
-        xVw: isTabletPortrait ? -0.72 : isDesktop ? -0.66 : -0.68,
-        yVh: isTabletPortrait ? -0.24 : isDesktop ? 0 : 0.06,
+        xVw: g.enterX,
+        yVh: g.restY,
 
         z: -35,
 
         yaw: -450,
-        pitch: isDesktop ? 4 : 3,
+        pitch: g.pitch,
         roll: -7,
 
-        scale: isTabletPortrait ? 0.82 : isDesktop ? 0.9 : 0.82,
+        scale: g.enterScale,
 
         screenF: 0,
 
@@ -358,12 +357,95 @@
 
       let cancelled = false;
 
+      const heightOf = (el) =>
+        el ? el.getBoundingClientRect().height : 0;
+
+      /*
+        Tablet vertical composition.
+
+        Portrait:  phone + copy are one block, centred in the viewport.
+                   The same is done for the final beat (rotated phone +
+                   download copy).
+        Landscape: the phone stays on the vertical centre line beside the
+                   copy; only the final beat (download copy above the
+                   rotated phone) is centred as a block.
+      */
+
+      const placeTabletGroups = () => {
+        const edge = clamp(44, 84, size.h * 0.06);
+        const gap = clamp(22, 40, size.h * 0.03);
+        const avail = size.h - edge * 2;
+
+        const phoneH = g.deviceHeight * g.restScale;
+        const rotatedH = g.deviceHeight * g.finalScale * (9 / 19.5);
+
+        const downloadH = heightOf(els.downloadCopy);
+
+        const beforeFinal = !story || story.progress() * BEATS < 5;
+
+        if (isTabletPortrait) {
+          const probeHeights = featureProbes
+            .filter(Boolean)
+            .map(heightOf);
+
+          const copyH = Math.max(
+            heightOf(els.tagline),
+            heightOf(els.featureCopy),
+            ...probeHeights
+          );
+
+          const groupH = phoneH + gap + copyH;
+          const groupTop = edge + Math.max(0, (avail - groupH) / 2);
+
+          if (beforeFinal) {
+            pose.yVh = (groupTop + phoneH / 2) / size.h - 0.5;
+          }
+
+          els.stage.style.setProperty(
+            '--copy-top',
+            `${(groupTop + phoneH + gap).toFixed(1)}px`
+          );
+
+          const finalH = rotatedH + gap + downloadH;
+          const finalTop = edge + Math.max(0, (avail - finalH) / 2);
+
+          finalY = (finalTop + rotatedH / 2) / size.h - 0.5;
+
+          els.stage.style.setProperty(
+            '--download-top',
+            `${(finalTop + rotatedH + gap).toFixed(1)}px`
+          );
+
+          return;
+        }
+
+        // Landscape tablet: copy on top, rotated phone underneath.
+        const finalH = downloadH + gap + rotatedH;
+        const finalTop = edge + Math.max(0, (avail - finalH) / 2);
+
+        finalY =
+          (finalTop + downloadH + gap + rotatedH / 2) / size.h - 0.5;
+
+        els.stage.style.setProperty(
+          '--download-top',
+          `${finalTop.toFixed(1)}px`
+        );
+      };
+
       const measure = () => {
         size.w = els.stage.clientWidth;
         size.h = els.stage.clientHeight;
+
+        g = geometry;
+        finalY = g.finalY;
+
+        if (!isDesktop && size.h > 0) placeTabletGroups();
       };
 
       measure();
+
+      // Probes and --col-* variables land one frame after mount.
+      if (!isDesktop) settle(measure);
 
       window.addEventListener(
         'resize',
@@ -406,6 +488,9 @@
 
       whenFontsReady(1500).then(() => {
         if (cancelled) return;
+
+        // Re-measure the copy once font metrics settle.
+        measure();
 
         gsap.to(headline, {
           opacity: 1,
@@ -501,13 +586,13 @@
       timeline.to(
         pose,
         {
-          xVw: restX,
+          xVw: () => g.restX,
 
           yaw: 0,
           z: 0,
           roll: 0,
 
-          scale: restScale,
+          scale: () => g.restScale,
 
           duration: D(0.9),
 
@@ -538,7 +623,7 @@
       timeline.to(
         pose,
         {
-          xVw: featureX,
+          xVw: () => g.featureX,
 
           yaw: -360,
 
@@ -620,13 +705,13 @@
         pose,
         {
           xVw: 0,
-          yVh: landscapeY,
+          yVh: () => finalY,
 
           yaw: 0,
           pitch: 0,
           roll: 90,
 
-          scale: landscapeScale,
+          scale: () => g.finalScale,
 
           duration: D(0.6),
 
@@ -650,6 +735,8 @@
       */
 
       timeline.set({}, { x: 0 }, 1);
+
+      story = timeline;
 
       /*
         TIME-BASED TEXT ANIMATIONS
@@ -1285,6 +1372,9 @@
 
         window.removeEventListener('resize', measure);
 
+        els.stage.style.removeProperty('--copy-top');
+        els.stage.style.removeProperty('--download-top');
+
         observer.disconnect();
 
         gsap.ticker.remove(render);
@@ -1448,7 +1538,7 @@
 <section
   class="scene"
   id="story"
-  style={`--beats: ${BEATS}`}
+  style={`--beats: ${BEATS}; --col-w: ${geometry.colW}px; --col-m: ${geometry.margin}px`}
   bind:this={scene}
   class:reduced-motion={reduced}
   class:phone-debug={PHONE_DEBUG}
@@ -1492,6 +1582,21 @@
         health information close. Use it online or offline.
       </p>
     </div>
+
+    <!-- Invisible copies of every feature, measured for portrait layout -->
+    {#if layoutMode === 'tablet-portrait' && !reduced}
+      {#each features as feature, i}
+        <div
+          class="copy feature-copy scheme-white copy-probe"
+          bind:this={featureProbes[i]}
+          aria-hidden="true"
+        >
+          <h2>{feature.title}</h2>
+
+          <p class="sub">{feature.body}</p>
+        </div>
+      {/each}
+    {/if}
 
     <!-- Features -->
     {#if reduced}
@@ -2244,17 +2349,24 @@
     pointer-events: none;
   }
 
-  /* Tablet landscape: retain the desktop's two-column story, but tighten it. */
+  /*
+    Tablet landscape: a mirrored two-column grid.
+
+    --col-m and --col-w come from layout.js, so the copy column and the
+    phone's anchor point (the centre of the opposite column) are always
+    derived from the same numbers.
+  */
 
   @media (min-width: 641px) and (max-width: 1199px) and (orientation: landscape) {
     .tablet-landscape .tagline {
-      left: 5%;
-      width: 37%;
+      left: var(--col-m, 5%);
+      width: var(--col-w, 40%);
     }
 
     .tablet-landscape .feature-copy {
-      right: 5%;
-      width: 37%;
+      right: var(--col-m, 5%);
+      left: auto;
+      width: var(--col-w, 40%);
     }
 
     .tablet-landscape h1,
@@ -2262,12 +2374,23 @@
       font-size: clamp(2.15rem, 4.2vw, 3.6rem);
     }
 
+    .tablet-landscape .tagline h2,
+    .tablet-landscape .feature-copy h2 {
+      font-size: clamp(2.6rem, 5.2vw, 4.2rem);
+    }
+
     .tablet-landscape .sub {
       font-size: clamp(0.88rem, 1.4vw, 1rem);
     }
 
+    .tablet-landscape .tagline .sub,
+    .tablet-landscape .feature-copy .sub {
+      max-width: 44ch;
+      font-size: clamp(1.02rem, 1.7vw, 1.25rem);
+    }
+
     .tablet-landscape .download-copy {
-      top: clamp(76px, 14svh, 118px);
+      top: var(--download-top, clamp(76px, 14svh, 118px));
     }
 
     .tablet-landscape .download-copy h2 {
@@ -2275,49 +2398,57 @@
     }
   }
 
-  /* Tablet portrait: phone above the copy, never beside or behind it. */
+  /*
+    Tablet portrait: phone and copy form one block, stacked and centred
+    vertically. --copy-top and --download-top are measured in Hero.svelte.
+  */
 
   @media (min-width: 641px) and (max-width: 1199px) and (orientation: portrait) {
     .tablet-portrait .copy.tagline,
     .tablet-portrait .copy.feature-copy {
       inset: auto;
+      top: var(--copy-top, auto);
       right: 7%;
-      bottom: clamp(34px, 7svh, 72px);
       left: 7%;
       width: auto;
-      max-width: 720px;
+      max-width: 760px;
       margin: 0 auto;
       text-align: center;
     }
 
     .tablet-portrait .copy.tagline h2,
     .tablet-portrait .copy.feature-copy h2 {
-      max-width: 18ch;
-      margin: 0 auto 12px;
-      font-size: clamp(2.15rem, 5.2vw, 3.6rem);
+      max-width: 20ch;
+      margin: 0 auto 14px;
+      font-size: clamp(2.7rem, 6.4vw, 4.6rem);
+      line-height: 0.98;
     }
 
     .tablet-portrait .copy.tagline .sub,
     .tablet-portrait .copy.feature-copy .sub {
-      max-width: 43ch;
+      max-width: 46ch;
       margin-inline: auto;
-      font-size: clamp(0.9rem, 1.9vw, 1.05rem);
+      font-size: clamp(1.02rem, 2.3vw, 1.35rem);
       line-height: 1.5;
     }
 
-    .tablet-portrait .download-copy {
-      top: auto;
-      bottom: clamp(26px, 6svh, 64px);
+    .tablet-portrait .copy-probe {
+      pointer-events: none;
+    }
+
+    .tablet-portrait:not(.reduced-motion) .download-copy {
+      top: var(--download-top, 60%);
+      bottom: auto;
       width: 88%;
     }
 
     .tablet-portrait .download-copy h2 {
-      font-size: clamp(1.8rem, 4.8vw, 2.7rem);
+      font-size: clamp(1.9rem, 5.2vw, 3rem);
     }
 
     .tablet-portrait .download-copy .sub {
-      max-width: 44ch;
-      font-size: 0.9rem;
+      max-width: 46ch;
+      font-size: 1rem;
     }
 
     .tablet-portrait .problem h1 {
@@ -2356,7 +2487,15 @@
     .tablet-portrait.reduced-motion .phone-slot {
       top: 29%;
       left: 50%;
-      transform: rotateZ(90deg) scale(0.62);
+      transform: scale(0.9);
+    }
+
+    .tablet-portrait.reduced-motion .static-features h3 {
+      font-size: clamp(1.25rem, 2.4vw, 1.75rem);
+    }
+
+    .tablet-portrait.reduced-motion .static-features p {
+      font-size: clamp(0.95rem, 1.5vw, 1.05rem);
     }
   }
 

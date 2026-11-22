@@ -427,7 +427,8 @@
     to { transform: rotate(8deg); }
   }
 
-  @media (max-width: 767px) {
+  /* Match Hero.svelte: tablet starts at 641px, mobile ends at 640px. */
+  @media (max-width: 640px) {
     .shapes { display: none; }
   }
 </style>

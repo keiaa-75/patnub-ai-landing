@@ -161,7 +161,7 @@
 
   onMount(() => {
     // Mobile gets its own treatment later.
-    if (!window.matchMedia('(min-width: 768px)').matches) return;
+    if (!window.matchMedia('(min-width: 641px)').matches) return;
 
     const size = { w: 1, h: 1 };
     const blobIndexes = SHAPES.flatMap((shape, i) => (shape.kind === 'blob' ? [i] : []));

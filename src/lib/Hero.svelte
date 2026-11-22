@@ -10,6 +10,7 @@
   import BrewCodeArtwork from './BrewCodeArtwork.svelte';
   import FloatingControls from './FloatingControls.svelte';
   import Shapes from './Shapes.svelte';
+  import MobileExperience from './MobileExperience.svelte';
 
   import { spatial, effects } from './motion.js';
 
@@ -58,6 +59,27 @@
   const NO_SHAPES = FLAGS.has('noshapes') || PHONE_DEBUG;
   const NO_3D = FLAGS.has('no3d') || PHONE_DEBUG;
 
+  const MOBILE_QUERY = [
+    '(max-width: 640px)',
+    '(max-width: 900px) and (max-height: 480px) and (orientation: landscape)'
+  ].join(', ');
+
+  function getLayoutMode() {
+    if (typeof window === 'undefined') return 'desktop';
+    if (!PHONE_DEBUG && window.matchMedia(MOBILE_QUERY).matches) return 'mobile';
+
+    if (window.innerWidth <= 1199) {
+      return window.matchMedia('(orientation: portrait)').matches
+        ? 'tablet-portrait'
+        : 'tablet-landscape';
+    }
+
+    return 'desktop';
+  }
+
+  let layoutMode = $state(getLayoutMode());
+  let isMobile = $derived(layoutMode === 'mobile' && !PHONE_DEBUG);
+
   const T = (beat, fraction = 0) =>
     (beat + fraction) / BEATS;
 
@@ -83,26 +105,27 @@
     ]);
   };
 
-  let scene;
-  let stage;
+  let scene = $state(null);
+  let stage = $state(null);
 
-  let bgTeal;
-  let bgWhite;
+  let bgTeal = $state(null);
+  let bgWhite = $state(null);
 
-  let problem;
-  let tagline;
+  let problem = $state(null);
+  let tagline = $state(null);
   let featureCopy = $state(null);
-  let downloadCopy;
+  let downloadCopy = $state(null);
 
   let shapes = $state(null);
-  let scrollHint;
+  let scrollHint = $state(null);
 
-  let phoneSlot;
-  let contactShadow;
-  let screenFade;
+  let phoneSlot = $state(null);
+  let contactShadow = $state(null);
+  let screenFade = $state(null);
 
   let phone3d = $state(null);
   let Phone3DLazy = $state(null);
+  let phone3DImportPromise = null;
 
   let screen = $state(0);
   let step = $state(0);
@@ -122,26 +145,20 @@
   */
 
   const getDeviceHeight = () => {
-    if (typeof window === 'undefined') {
-      return 420;
-    }
+    if (typeof window === 'undefined') return 420;
 
     const width = window.innerWidth;
     const height = window.innerHeight;
 
-    if (width < 768) {
-      return Math.min(
-        height * 0.42,
-        width * 0.82,
-        300
-      );
+    if (layoutMode === 'tablet-portrait') {
+      return Math.min(height * 0.32, width * 0.54, 430);
     }
 
-    return Math.min(
-      height * 0.72,
-      width * 0.78,
-      680
-    );
+    if (layoutMode === 'tablet-landscape') {
+      return Math.min(height * 0.58, width * 0.38, 460);
+    }
+
+    return Math.min(height * 0.72, width * 0.78, 680);
   };
 
   let deviceHeight = $state(getDeviceHeight());
@@ -189,72 +206,113 @@
     deviceHeight = getDeviceHeight();
   }
 
+  function ensurePhone3D() {
+    if (NO_3D || isMobile || Phone3DLazy || phone3DImportPromise) return;
+
+    phone3DImportPromise = import('./Phone3D.svelte')
+      .then((module) => {
+        Phone3DLazy = module.default;
+      })
+      .catch((error) => {
+        console.warn('[patnub.ai] Could not load 3D phone:', error);
+        use3d = false;
+        startShapes();
+      });
+  }
+
+  function syncViewportLayout() {
+    const nextLayout = getLayoutMode();
+    const changed = nextLayout !== layoutMode;
+
+    if (changed) {
+      layoutMode = nextLayout;
+
+      if (nextLayout === 'mobile') {
+        threeReady = false;
+        phone3d = null;
+      }
+    }
+
+    updateDeviceHeight();
+
+    if (nextLayout !== 'mobile') {
+      gsap.registerPlugin(ScrollTrigger);
+
+      const prefersReducedMotion = window.matchMedia(
+        '(prefers-reduced-motion: reduce)'
+      ).matches;
+
+      if (NO_3D) startShapes();
+      else if (!prefersReducedMotion) ensurePhone3D();
+    }
+  }
+
   const startShapes = () =>
     settle(() => shapes?.enter());
 
   onMount(() => {
     /*
-      Initialize ScrollTrigger and viewport measurement.
+      Only desktop and tablet construct the 3D story. Mobile gets
+      a separate document-flow layout with no pinned ScrollTrigger.
     */
 
-    gsap.registerPlugin(ScrollTrigger);
-
-    updateDeviceHeight();
-
-    window.addEventListener(
-      'resize',
-      updateDeviceHeight,
-      { passive: true }
-    );
-
-    /*
-      Lazy-load the 3D device.
-    */
-
-    if (NO_3D) {
-      startShapes();
-    } else {
-      import('./Phone3D.svelte')
-        .then((module) => {
-          Phone3DLazy = module.default;
-        })
-        .catch((error) => {
-          console.warn(
-            '[patnub.ai] Could not load 3D phone:',
-            error
-          );
-
-          use3d = false;
-
-          startShapes();
-        });
+    if (!isMobile) {
+      gsap.registerPlugin(ScrollTrigger);
+      syncViewportLayout();
     }
 
+    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    window.addEventListener('resize', syncViewportLayout, { passive: true });
+    reducedMotionQuery.addEventListener?.('change', syncViewportLayout);
+
     /*
-      Construct the story for a desktop or mobile layout.
+      Build the appropriate 3D story for each non-mobile layout.
     */
 
-    const buildStory = (isDesktop) => {
+    const buildStory = (layout) => {
+      const isDesktop = layout === 'desktop';
+      const isTabletPortrait = layout === 'tablet-portrait';
+      const els = {
+        scene,
+        stage,
+        bgTeal,
+        bgWhite,
+        problem,
+        tagline,
+        featureCopy,
+        downloadCopy,
+        scrollHint,
+        phoneSlot,
+        contactShadow,
+        screenFade
+      };
+
+      if (!els.scene || !els.stage || !els.phoneSlot) return () => {};
+
       reduced = false;
 
-      const restX = isDesktop ? 0.22 : 0;
-      const featureX = isDesktop ? -0.22 : 0;
+      const restX = isTabletPortrait ? 0 : isDesktop ? 0.22 : 0.19;
+      const featureX = isTabletPortrait ? 0 : isDesktop ? -0.22 : -0.19;
 
-      const restScale = isDesktop ? 1 : 0.88;
+      const restScale = isTabletPortrait ? 0.82 : isDesktop ? 1 : 0.9;
 
       /*
-        The landscape phone rests slightly below
-        the vertical midpoint of the viewport.
+        Portrait tablets keep the phone in the upper half while
+        feature copy occupies a dedicated band below it. Landscape
+        tablets retain the compact two-column product composition.
       */
 
-      const landscapeScale = isDesktop ? 1.08 : 0.88;
-      const landscapeY = isDesktop
-        ? (window.innerHeight <= 680 ? 0.20 : 0.23)
-        : (window.innerHeight <= 680 ? 0.095 : 0.10);
+      const landscapeScale = isTabletPortrait ? 0.82 : isDesktop ? 1.08 : 0.9;
+      const landscapeY = isTabletPortrait
+        ? -0.12
+        : isDesktop
+          ? (window.innerHeight <= 680 ? 0.20 : 0.23)
+          : (window.innerHeight <= 680 ? 0.095 : 0.10);
 
       const pose = {
-        xVw: isDesktop ? -0.66 : -0.72,
-        yVh: isDesktop ? 0 : 0.17,
+        xVw: isTabletPortrait ? -0.72 : isDesktop ? -0.66 : -0.68,
+        yVh: isTabletPortrait ? -0.24 : isDesktop ? 0 : 0.06,
 
         z: -35,
 
@@ -262,7 +320,7 @@
         pitch: isDesktop ? 4 : 3,
         roll: -7,
 
-        scale: isDesktop ? 0.9 : 0.74,
+        scale: isTabletPortrait ? 0.82 : isDesktop ? 0.9 : 0.82,
 
         screenF: 0,
 
@@ -301,8 +359,8 @@
       let cancelled = false;
 
       const measure = () => {
-        size.w = stage.clientWidth;
-        size.h = stage.clientHeight;
+        size.w = els.stage.clientWidth;
+        size.h = els.stage.clientHeight;
       };
 
       measure();
@@ -318,17 +376,17 @@
       */
 
       gsap.set(
-        [tagline, featureCopy, downloadCopy].filter(Boolean),
+        [els.tagline, els.featureCopy, els.downloadCopy].filter(Boolean),
         { autoAlpha: 0 }
       );
 
-      gsap.set(problem, {
+      gsap.set(els.problem, {
         autoAlpha: 1,
         y: 0
       });
 
-      if (scrollHint) {
-        gsap.set(scrollHint, {
+      if (els.scrollHint) {
+        gsap.set(els.scrollHint, {
           autoAlpha: 1
         });
       }
@@ -336,7 +394,7 @@
       screen = 0;
       step = 0;
 
-      const headline = problem.querySelector('h1');
+      const headline = els.problem.querySelector('h1');
 
       gsap.set(headline, {
         y: 28
@@ -382,7 +440,7 @@
         scrollTrigger: {
           id: 'patnub-story',
 
-          trigger: scene,
+          trigger: els.scene,
 
           start: 'top top',
           end: 'bottom bottom',
@@ -681,22 +739,22 @@
       };
 
       const setProblem = (show) => {
-        gsap.killTweensOf(problem);
+        gsap.killTweensOf(els.problem);
 
         if (show) {
-          gsap.to(problem, {
+          gsap.to(els.problem, {
             autoAlpha: 1,
             duration: 0.4,
             ease: effects
           });
 
-          gsap.to(problem, {
+          gsap.to(els.problem, {
             y: 0,
             duration: 0.9,
             ease: spatial
           });
         } else {
-          gsap.to(problem, {
+          gsap.to(els.problem, {
             autoAlpha: 0,
             y: -28,
             duration: 0.3,
@@ -706,9 +764,9 @@
       };
 
       const setHint = (show) => {
-        if (!scrollHint) return;
+        if (!els.scrollHint) return;
 
-        gsap.to(scrollHint, {
+        gsap.to(els.scrollHint, {
           autoAlpha: show ? 1 : 0,
 
           duration: 0.3,
@@ -726,7 +784,7 @@
       */
 
       const swapFeature = (index, dir) => {
-        const parts = partsOf(featureCopy);
+        const parts = partsOf(els.featureCopy);
 
         gsap.killTweensOf(parts);
 
@@ -855,9 +913,9 @@
           gates.tagline = taglineOn;
 
           if (taglineOn) {
-            showBlock(tagline);
+            showBlock(els.tagline);
           } else {
-            hideBlock(tagline, 'tagline');
+            hideBlock(els.tagline, 'tagline');
           }
         }
 
@@ -878,9 +936,9 @@
           if (featureOn) {
             step = featureIndex;
 
-            showBlock(featureCopy);
+            showBlock(els.featureCopy);
           } else {
-            hideBlock(featureCopy, 'feature');
+            hideBlock(els.featureCopy, 'feature');
           }
         }
 
@@ -902,9 +960,9 @@
           gates.download = downloadOn;
 
           if (downloadOn) {
-            showBlock(downloadCopy);
+            showBlock(els.downloadCopy);
           } else {
-            hideBlock(downloadCopy, 'download');
+            hideBlock(els.downloadCopy, 'download');
           }
         }
 
@@ -989,8 +1047,8 @@
             roll,
             scale
           });
-        } else if (phoneSlot) {
-          gsap.set(phoneSlot, {
+        } else if (els.phoneSlot) {
+          gsap.set(els.phoneSlot, {
             x: pose.xVw * size.w,
 
             y: pose.yVh * size.h + idle.y,
@@ -1013,19 +1071,19 @@
         const clipWhite = clipFor(pose.reveal2);
 
         if (
-          bgTeal &&
+          els.bgTeal &&
           clipTeal !== lastClipTeal
         ) {
-          bgTeal.style.clipPath = clipTeal;
+          els.bgTeal.style.clipPath = clipTeal;
 
           lastClipTeal = clipTeal;
         }
 
         if (
-          bgWhite &&
+          els.bgWhite &&
           clipWhite !== lastClipWhite
         ) {
-          bgWhite.style.clipPath = clipWhite;
+          els.bgWhite.style.clipPath = clipWhite;
 
           lastClipWhite = clipWhite;
         }
@@ -1036,13 +1094,13 @@
 
         const radians = yaw * Math.PI / 180;
 
-        if (phoneSlot) {
-          phoneSlot.style.setProperty(
+        if (els.phoneSlot) {
+          els.phoneSlot.style.setProperty(
             '--sheen',
             `${50 + Math.sin(radians) * 26}%`
           );
 
-          phoneSlot.style.setProperty(
+          els.phoneSlot.style.setProperty(
             '--glass-pos',
             `${50 + Math.sin(radians) * 18}%`
           );
@@ -1052,10 +1110,10 @@
           Contact shadow.
         */
 
-        if (contactShadow) {
+        if (els.contactShadow) {
           const edge = Math.abs(Math.cos(radians));
 
-          gsap.set(contactShadow, {
+          gsap.set(els.contactShadow, {
             x: size.w * (0.5 + pose.xVw),
 
             y:
@@ -1075,12 +1133,12 @@
           CSS fallback screen crossfade.
         */
 
-        if (screenFade) {
+        if (els.screenFade) {
           const difference = Math.abs(
             pose.screenF - Math.round(pose.screenF)
           );
 
-          screenFade.style.opacity =
+          els.screenFade.style.opacity =
             1 - difference * 0.85;
         }
 
@@ -1131,7 +1189,7 @@
           return;
         }
 
-        const bounds = stage.getBoundingClientRect();
+        const bounds = els.stage.getBoundingClientRect();
 
         const x = (
           (event.clientX - bounds.left) /
@@ -1149,7 +1207,7 @@
         tiltYaw(x * 3.5);
       };
 
-      stage.addEventListener(
+      els.stage.addEventListener(
         'pointermove',
         onPointer,
         { passive: true }
@@ -1180,7 +1238,7 @@
         }
       );
 
-      observer.observe(stage);
+      observer.observe(els.stage);
 
       gsap.ticker.add(render);
 
@@ -1194,17 +1252,17 @@
         cancelled = true;
 
         const blocks = [
-          problem,
-          scrollHint,
-          tagline,
-          featureCopy,
-          downloadCopy
+          els.problem,
+          els.scrollHint,
+          els.tagline,
+          els.featureCopy,
+          els.downloadCopy
         ].filter(Boolean);
 
         const parts = [
-          ...partsOf(tagline),
-          ...partsOf(featureCopy),
-          ...partsOf(downloadCopy)
+          ...partsOf(els.tagline),
+          ...partsOf(els.featureCopy),
+          ...partsOf(els.downloadCopy)
         ];
 
         gsap.killTweensOf([
@@ -1220,15 +1278,12 @@
           { clearProps: 'all' }
         );
 
-        stage.removeEventListener(
+        els.stage.removeEventListener(
           'pointermove',
           onPointer
         );
 
-        window.removeEventListener(
-          'resize',
-          measure
-        );
+        window.removeEventListener('resize', measure);
 
         observer.disconnect();
 
@@ -1275,6 +1330,9 @@
     */
 
     const buildPhoneInspection = () => {
+      const inspectionPhoneSlot = phoneSlot;
+      if (!inspectionPhoneSlot) return () => {};
+
       reduced = false;
       screen = 0;
       step = 0;
@@ -1292,7 +1350,7 @@
         autoAlpha: 0
       });
 
-      gsap.set(phoneSlot, {
+      gsap.set(inspectionPhoneSlot, {
         x: 0,
         y: 0,
         z: 0,
@@ -1305,23 +1363,23 @@
 
       const debugYaw = PHONE_DEBUG_POSE.yaw * Math.PI / 180;
 
-      phoneSlot.style.setProperty(
+      inspectionPhoneSlot.style.setProperty(
         '--sheen',
         `${50 + Math.sin(debugYaw) * 26}%`
       );
 
-      phoneSlot.style.setProperty(
+      inspectionPhoneSlot.style.setProperty(
         '--glass-pos',
         `${50 + Math.sin(debugYaw) * 18}%`
       );
 
       return () => {
-        gsap.set(phoneSlot, {
+        gsap.set(inspectionPhoneSlot, {
           clearProps: 'transform'
         });
 
-        phoneSlot.style.removeProperty('--sheen');
-        phoneSlot.style.removeProperty('--glass-pos');
+        inspectionPhoneSlot.style.removeProperty('--sheen');
+        inspectionPhoneSlot.style.removeProperty('--glass-pos');
 
         gsap.set(hiddenContent, {
           clearProps: 'opacity,visibility'
@@ -1331,21 +1389,41 @@
 
     const media = gsap.matchMedia();
 
+    const mountStory = (layout) => {
+      let cancelled = false;
+      let cleanup = null;
+
+      // A media-query change can precede Svelte's DOM update by one microtask.
+      tick().then(() => {
+        if (!cancelled) cleanup = buildStory(layout);
+      });
+
+      return () => {
+        cancelled = true;
+        cleanup?.();
+      };
+    };
+
     if (PHONE_DEBUG) {
       media.add('(min-width: 0px)', buildPhoneInspection);
     } else {
       media.add(
-        '(min-width: 768px) and (prefers-reduced-motion: no-preference)',
-        () => buildStory(true)
+        '(min-width: 1200px) and (prefers-reduced-motion: no-preference)',
+        () => mountStory('desktop')
       );
 
       media.add(
-        '(max-width: 767px) and (prefers-reduced-motion: no-preference)',
-        () => buildStory(false)
+        '(min-width: 641px) and (max-width: 1199px) and (orientation: portrait) and (prefers-reduced-motion: no-preference)',
+        () => mountStory('tablet-portrait')
       );
 
       media.add(
-        '(prefers-reduced-motion: reduce)',
+        '(min-width: 641px) and (max-width: 1199px) and (orientation: landscape) and (prefers-reduced-motion: no-preference)',
+        () => mountStory('tablet-landscape')
+      );
+
+      media.add(
+        '(min-width: 641px) and (prefers-reduced-motion: reduce)',
         buildReducedMotion
       );
     }
@@ -1357,15 +1435,16 @@
     return () => {
       media.revert();
 
-      window.removeEventListener(
-        'resize',
-        updateDeviceHeight
-      );
+      window.removeEventListener('resize', syncViewportLayout);
+      reducedMotionQuery.removeEventListener?.('change', syncViewportLayout);
 
     };
   });
 </script>
 
+{#if isMobile && !PHONE_DEBUG}
+  <MobileExperience {features} />
+{:else}
 <section
   class="scene"
   id="story"
@@ -1373,6 +1452,8 @@
   bind:this={scene}
   class:reduced-motion={reduced}
   class:phone-debug={PHONE_DEBUG}
+  class:tablet-portrait={layoutMode === 'tablet-portrait'}
+  class:tablet-landscape={layoutMode === 'tablet-landscape'}
   aria-label="How patnub.ai helps you understand your health"
 >
   <div
@@ -1537,14 +1618,15 @@
     </div>
   </div>
 </section>
+{/if}
 
 <!-- Floating controls stay outside the clipped scroll stage. -->
 <FloatingControls />
 
 <style>
-  /*
-    Six scroll intervals create seven viewport positions.
-  */
+  /* ---------------------------
+     Desktop and tablet scroll story.
+  --------------------------- */
 
   .scene {
     position: relative;
@@ -2162,175 +2244,127 @@
     pointer-events: none;
   }
 
-  /* Medium desktop */
+  /* Tablet landscape: retain the desktop's two-column story, but tighten it. */
 
-  @media (max-width: 1100px) and (min-width: 768px) {
-    .tagline {
-      left: 6%;
-      width: 40%;
+  @media (min-width: 641px) and (max-width: 1199px) and (orientation: landscape) {
+    .tablet-landscape .tagline {
+      left: 5%;
+      width: 37%;
     }
 
-    .feature-copy {
-      right: 8%;
-      width: 38%;
+    .tablet-landscape .feature-copy {
+      right: 5%;
+      width: 37%;
     }
 
-    h1,
-    h2 {
-      font-size: clamp(2.4rem, 4.5vw, 4rem);
+    .tablet-landscape h1,
+    .tablet-landscape h2 {
+      font-size: clamp(2.15rem, 4.2vw, 3.6rem);
     }
 
-    .download-copy h2 {
-      font-size: clamp(1.9rem, 4vw, 3rem);
+    .tablet-landscape .sub {
+      font-size: clamp(0.88rem, 1.4vw, 1rem);
+    }
+
+    .tablet-landscape .download-copy {
+      top: clamp(76px, 14svh, 118px);
+    }
+
+    .tablet-landscape .download-copy h2 {
+      font-size: clamp(1.8rem, 3.8vw, 2.8rem);
     }
   }
 
-  /* Mobile */
+  /* Tablet portrait: phone above the copy, never beside or behind it. */
 
-  @media (max-width: 767px) {
-    .problem {
-      inset-block:
-        clamp(80px, 12svh, 110px)
-        clamp(90px, 14svh, 120px);
-
-      right: 0;
-      left: 0;
-
-      width: 86%;
-
-      margin: auto;
-    }
-
-    .problem h1 {
-      max-width: 15ch;
-
-      font-size: clamp(2.25rem, 10vw, 3.4rem);
-    }
-
-    .copy {
-      inset-block: auto;
-
-      top: clamp(96px, 14svh, 130px);
-
-      margin-block: 0;
-
-      left: 7%;
-      width: 86%;
-    }
-
-    .copy.problem {
-      inset-block:
-        clamp(80px, 12svh, 110px)
-        clamp(90px, 14svh, 120px);
-    }
-
-    .copy.feature-copy {
-      right: auto;
-      left: 7%;
-
-      width: 86%;
-    }
-
-    h1,
-    h2 {
-      max-width: 12ch;
-
-      margin-bottom: 12px;
-
-      font-size: clamp(2.3rem, 9.5vw, 3.2rem);
-    }
-
-    .sub {
-      max-width: 35ch;
-
-      font-size: 13px;
-      line-height: 1.55;
-    }
-
-    .download-copy {
-      top: 68px;
-      left: 5%;
-
-      width: 90%;
-    }
-
-    .download-copy h2 {
-      max-width: 100%;
-
-      font-size: clamp(1.8rem, 7.5vw, 2.5rem);
-    }
-
-    .download-copy .sub {
-      max-width: 34ch;
-
-      font-size: 11px;
-    }
-
-    .download-actions {
-      gap: 8px;
-      margin-top: 11px;
-    }
-
-    .download-button,
-    .clinician-button {
-      min-height: 42px;
-      padding: 10px 16px;
-      gap: 7px;
-      font-size: 12px;
-    }
-
-    .download-button .material-symbols-rounded,
-    .clinician-button .material-symbols-rounded {
-      font-size: 17px;
-    }
-
-    .static-features {
-      top: 12%;
-      left: 7%;
-
-      width: 86%;
-
-      gap: 8px;
-    }
-
-    .static-features article {
-      padding: 9px 12px;
-
-      border-radius: 14px;
-    }
-
-    .static-features h3 {
-      font-size: 16px;
-    }
-
-    .static-features p {
-      font-size: 10px;
-    }
-
-    .reduced-motion .stage {
-      min-height: 1600px;
-    }
-
-    .reduced-motion .static-features {
-      top: 30%;
-      left: 7%;
-
-      width: 86%;
-    }
-
-    .reduced-motion .phone-slot {
-      top: 68%;
-      left: 50%;
-
-      transform: rotateZ(90deg) scale(0.66);
-    }
-
-    .reduced-motion .download-copy {
+  @media (min-width: 641px) and (max-width: 1199px) and (orientation: portrait) {
+    .tablet-portrait .copy.tagline,
+    .tablet-portrait .copy.feature-copy {
+      inset: auto;
       right: 7%;
-      bottom: 40px;
+      bottom: clamp(34px, 7svh, 72px);
       left: 7%;
-
       width: auto;
+      max-width: 720px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .tablet-portrait .copy.tagline h2,
+    .tablet-portrait .copy.feature-copy h2 {
+      max-width: 18ch;
+      margin: 0 auto 12px;
+      font-size: clamp(2.15rem, 5.2vw, 3.6rem);
+    }
+
+    .tablet-portrait .copy.tagline .sub,
+    .tablet-portrait .copy.feature-copy .sub {
+      max-width: 43ch;
+      margin-inline: auto;
+      font-size: clamp(0.9rem, 1.9vw, 1.05rem);
+      line-height: 1.5;
+    }
+
+    .tablet-portrait .download-copy {
+      top: auto;
+      bottom: clamp(26px, 6svh, 64px);
+      width: 88%;
+    }
+
+    .tablet-portrait .download-copy h2 {
+      font-size: clamp(1.8rem, 4.8vw, 2.7rem);
+    }
+
+    .tablet-portrait .download-copy .sub {
+      max-width: 44ch;
+      font-size: 0.9rem;
+    }
+
+    .tablet-portrait .problem h1 {
+      max-width: 14ch;
+      font-size: clamp(3rem, 7vw, 5.2rem);
+    }
+
+    .tablet-portrait .scroll-hint {
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .tablet-portrait.reduced-motion .stage {
+      min-height: 1850px;
+    }
+
+    .tablet-portrait.reduced-motion .static-features {
+      top: 51%;
+      left: 7%;
+      width: 86%;
+      gap: 10px;
+    }
+
+    .tablet-portrait.reduced-motion .static-features article {
+      padding: 12px 15px;
+    }
+
+    .tablet-portrait.reduced-motion .download-copy {
+      right: 7%;
+      bottom: 46px;
+      left: 7%;
+      width: auto;
+      text-align: center;
+    }
+
+    .tablet-portrait.reduced-motion .phone-slot {
+      top: 29%;
+      left: 50%;
+      transform: rotateZ(90deg) scale(0.62);
+    }
+  }
+
+  /* Fixed-angle inspection mode keeps its compact fallback styling. */
+
+  @media (max-width: 640px) {
+    .phone-debug .phone-slot {
+      transform: scale(0.72);
     }
   }
 
@@ -2364,7 +2398,7 @@
     }
   }
 
-  @media (max-width: 767px) and (max-height: 680px) {
+  @media (max-width: 640px) and (max-height: 680px) {
     .download-copy {
       top: 54px;
     }

@@ -3,7 +3,7 @@
   import { gsap } from 'gsap';
   import { spatial, effects } from './motion.js';
 
-  let { beats = 5 } = $props();
+  let { beats = 5, mode = 'desktop' } = $props();
 
   /*
     A small family of Material Expressive shapes that lives behind the phone.
@@ -13,14 +13,24 @@
     Blobs are drawn from polar radii, so any two of them can morph into each
     other. Pills are plain rounded rectangles.
 
+    Modes
+    -----
+    desktop  Original behaviour. Sized from the stage height, hidden below
+             641px, with scroll parallax.
+    mobile   Used by MobileExperience. The layer is fixed to the viewport,
+             sized from the shorter viewport side, and has one layout per
+             scene. There is no parallax; goTo(scene) moves the shapes.
+
     Performance notes:
       - Continuous spinning and swaying run as CSS animations on promoted
         layers, so they cost no JavaScript per frame.
       - Each shape's element is only as big as the largest size it ever uses.
       - Only one blob morphs at a time, and never during a beat change.
       - Nothing appears until enter() is called, so the entrance does not
-        compete with the 3D phone loading.
+        compete with other work on load.
   */
+
+  const mobile = $derived(mode === 'mobile');
 
   const N = 72;
   const TAU = Math.PI * 2;
@@ -87,8 +97,9 @@
     { id: 'pill-b', kind: 'pill', depth: 0.7, spin: 4.4 }
   ];
 
-  // x, y: centre as a fraction of the stage. k: size in stage-height units
-  // (0 hides it). r: rotation in degrees. c: fill.
+  // x, y: centre as a fraction of the stage. k: size in units (0 hides it).
+  // r: rotation in degrees. c: fill.
+  // Desktop units are stage heights; mobile units are the shorter viewport side.
   const L = (x, y, k, r, c) => ({ x, y, k, r, c });
   const OFF = (x, y, c) => ({ x, y, k: 0, r: 0, c });
 
@@ -125,11 +136,81 @@
     L(0.1, 0.84, 1, -30, '#c9eee5')
   ];
 
+  /*
+    Mobile: one layout per scene, in this order.
+      0  Opening question   peach
+      1  Say hi             teal
+      2  Ask in plain lang. mint
+      3  More features      cream
+      4  Download + credit  soft mint
+
+    Shapes hug the edges and corners so they frame the cards instead of
+    sitting under the text. Sizes are fractions of the shorter viewport side.
+  */
+  const MOBILE_LAYOUTS = [
+    [
+      L(0.92, 0.14, 0.9, 15, '#f6c898'),
+      L(0.04, 0.88, 0.8, -10, '#ffe9d2'),
+      L(0.98, 0.74, 0.5, 20, '#e9b07a'),
+      L(0.08, 0.2, 0.34, -20, '#f9d3ae'),
+      OFF(0.5, 1.15, '#ffe9d2'),
+      OFF(0.7, 0.5, '#f9d3ae'),
+      L(0.2, 0.62, 1, 35, '#d99a62'),
+      L(0.82, 0.36, 1, -25, '#d99a62')
+    ],
+    [
+      L(0.9, 0.1, 0.9, 0, '#17796c'),
+      L(0.02, 0.52, 0.6, 10, '#0b5148'),
+      L(0.96, 0.9, 0.7, -15, '#2f8f82'),
+      L(0.2, 0.06, 0.3, 25, '#ffddbd'),
+      L(0.62, 0.97, 0.4, 0, '#1f8173'),
+      OFF(0.5, 0.45, '#9adbcb'),
+      L(0.08, 0.22, 1, 30, '#ffddbd'),
+      L(0.93, 0.58, 1, -20, '#9adbcb')
+    ],
+    [
+      L(0.06, 0.06, 0.8, 0, '#cdeee4'),
+      L(0.98, 0.5, 0.7, -8, '#ffe3c9'),
+      L(0.02, 0.92, 0.6, 18, '#c6e6dc'),
+      L(0.9, 0.04, 0.3, -18, '#ffddbd'),
+      L(0.7, 0.98, 0.45, 0, '#d5e8e1'),
+      OFF(0.4, 0.5, '#c9eee5'),
+      L(0.94, 0.88, 1, 30, '#9adbcb'),
+      L(0.06, 0.5, 1, -30, '#ffddbd')
+    ],
+    [
+      L(0.96, 0.1, 0.7, 0, '#ffddbd'),
+      L(0.0, 0.42, 0.6, 20, '#ffe0c2'),
+      L(0.95, 0.62, 0.55, -12, '#c9eee5'),
+      L(0.1, 0.94, 0.5, 30, '#f9d3ae'),
+      L(0.9, 0.97, 0.4, 0, '#d5e8e1'),
+      L(0.05, 0.08, 0.35, 10, '#c9eee5'),
+      L(0.5, 0.02, 1, 60, '#e9b07a'),
+      L(0.97, 0.3, 1, -40, '#9adbcb')
+    ],
+    [
+      L(0.04, 0.08, 0.8, 0, '#bfe5d9'),
+      L(0.98, 0.3, 0.6, -10, '#ffddbd'),
+      L(0.0, 0.62, 0.5, 15, '#cde8df'),
+      L(0.9, 0.02, 0.28, 20, '#ffe0c2'),
+      L(0.1, 0.97, 0.5, 0, '#9adbcb'),
+      L(0.98, 0.92, 0.5, 10, '#ffddbd'),
+      L(0.03, 0.5, 1, 35, '#9adbcb'),
+      L(0.96, 0.5, 1, -30, '#ffddbd')
+    ]
+  ];
+
   // Each element is as big as the largest size its shape ever uses, and is
   // only scaled down from there. Small shapes therefore stay small layers.
-  const SIZE = SHAPES.map((_, i) =>
+  const DESKTOP_SIZE = SHAPES.map((_, i) =>
     Math.max(PEACH[i].k, TEAL[i].k, WHITE[i].k)
   );
+
+  const MOBILE_SIZE = SHAPES.map((_, i) =>
+    Math.max(...MOBILE_LAYOUTS.map((layout) => layout[i].k))
+  );
+
+  const SIZE = $derived(mobile ? MOBILE_SIZE : DESKTOP_SIZE);
 
   // Each feature beat nudges and turns the white layout a little further.
   const DRIFT = [
@@ -138,6 +219,11 @@
   ];
 
   const layoutFor = (beat) => {
+    if (mobile) {
+      const last = MOBILE_LAYOUTS.length - 1;
+      return MOBILE_LAYOUTS[Math.max(0, Math.min(beat, last))];
+    }
+
     if (beat <= 0) return PEACH;
     if (beat === 1) return TEAL;
 
@@ -160,8 +246,9 @@
   const pathEls = [];
 
   onMount(() => {
-    // Mobile gets its own treatment later.
-    if (!window.matchMedia('(min-width: 641px)').matches) return;
+    // Desktop mode keeps its original rule: tablets and up only.
+    // Mobile mode is the one place these shapes are meant for small screens.
+    if (!mobile && !window.matchMedia('(min-width: 641px)').matches) return;
 
     const size = { w: 1, h: 1 };
     const blobIndexes = SHAPES.flatMap((shape, i) => (shape.kind === 'blob' ? [i] : []));
@@ -180,7 +267,10 @@
     const measure = () => {
       size.w = host.clientWidth;
       size.h = host.clientHeight;
-      host.style.setProperty('--u', `${size.h}px`);
+
+      // Phones are tall and narrow, so the shorter side is the sensible unit.
+      const unit = mobile ? Math.min(size.w, size.h) : size.h;
+      host.style.setProperty('--u', `${unit}px`);
     };
 
     const draw = (i) => {
@@ -281,7 +371,7 @@
     measure();
 
     gsap.set(shapeEls, { xPercent: -50, yPercent: -50 });
-    apply(0, { instant: true });
+    apply(current, { instant: true });
     gsap.set(shapeEls, { scale: 0 });
     blobIndexes.forEach(draw);
 
@@ -319,6 +409,9 @@
     };
 
     api.setProgress = (progress) => {
+      // Mobile scenes are not scrubbed, so there is nothing to parallax.
+      if (mobile) return;
+
       parallax.forEach((set, i) => set(-progress * beats * SHAPES[i].depth * 30));
     };
 
@@ -346,7 +439,7 @@
   }
 </script>
 
-<div class="shapes" bind:this={host} aria-hidden="true">
+<div class="shapes" class:mobile bind:this={host} aria-hidden="true">
   {#each SHAPES as shape, i (shape.id)}
     <div class="shape" class:pill={shape.kind === 'pill'} style={`--s: ${SIZE[i]}`} bind:this={shapeEls[i]}>
       <div class="par" bind:this={parEls[i]}>
@@ -378,6 +471,15 @@
     z-index: 3;
     overflow: hidden;
     pointer-events: none;
+  }
+
+  /*
+    Mobile: one fixed layer behind every scene. The scenes are transparent,
+    so the shapes persist and move between scenes as a single system.
+  */
+  .shapes.mobile {
+    position: fixed;
+    z-index: 1;
   }
 
   .shape {
@@ -427,8 +529,8 @@
     to { transform: rotate(8deg); }
   }
 
-  /* Match Hero.svelte: tablet starts at 641px, mobile ends at 640px. */
+  /* Desktop mode only: matches Hero.svelte, where tablet starts at 641px. */
   @media (max-width: 640px) {
-    .shapes { display: none; }
+    .shapes:not(.mobile) { display: none; }
   }
 </style>

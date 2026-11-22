@@ -1,3 +1,4 @@
+
 <script>
   import { onMount, tick } from 'svelte';
 
@@ -1447,20 +1448,36 @@
         within reach, wherever you go.
       </p>
 
-      <a
-        class="download-button"
-        href="/downloads/patnub-ai.apk"
-        download="patnub-ai.apk"
-      >
-        <span
-          class="material-symbols-rounded"
-          aria-hidden="true"
+      <div class="download-actions">
+        <a
+          class="download-button"
+          href="/downloads/patnub-ai.apk"
+          download="patnub-ai.apk"
         >
-          download
-        </span>
+          <span
+            class="material-symbols-rounded"
+            aria-hidden="true"
+          >
+            download
+          </span>
 
-        Download
-      </a>
+          Download
+        </a>
+
+        <a
+          class="clinician-button"
+          href="/clinicians"
+        >
+          <span
+            class="material-symbols-rounded"
+            aria-hidden="true"
+          >
+            stethoscope
+          </span>
+
+          Clinician Platform
+        </a>
+      </div>
     </div>
 
     <!-- Contact shadow -->
@@ -1749,7 +1766,17 @@
     line-height: 1.45;
   }
 
-  .download-button {
+  .download-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .download-button,
+  .clinician-button {
     display: inline-flex;
 
     align-items: center;
@@ -1757,46 +1784,64 @@
 
     gap: 9px;
 
-    margin-top: 12px;
-
+    min-height: 44px;
     padding: 11px 22px;
 
-    border: 0;
+    border: 1px solid transparent;
     border-radius: 999px;
-
-    background: var(--md-primary-strong);
-
-    color: #ffffff;
 
     font-size: 14px;
     font-weight: 700;
 
     text-decoration: none;
-
-    box-shadow:
-      0 8px 22px rgba(14, 98, 87, 0.16);
+    white-space: nowrap;
 
     transition:
       transform 180ms ease,
       background 180ms ease,
+      color 180ms ease,
+      border-color 180ms ease,
       box-shadow 180ms ease;
+  }
+
+  .download-button {
+    background: var(--md-primary-strong);
+    color: #ffffff;
+    box-shadow: 0 8px 22px rgba(14, 98, 87, 0.16);
   }
 
   .download-button:hover {
     transform: translateY(-3px);
-
     background: #075b50;
-
-    box-shadow:
-      0 12px 26px rgba(14, 98, 87, 0.22);
+    box-shadow: 0 12px 26px rgba(14, 98, 87, 0.22);
   }
 
-  .download-button:active {
+  .clinician-button {
+    background: var(--md-secondary-container);
+    color: var(--md-on-secondary-container);
+    border-color: rgba(82, 105, 99, 0.12);
+  }
+
+  .clinician-button:hover {
+    transform: translateY(-3px);
+    background: #c8ded6;
+    box-shadow: 0 10px 22px rgba(27, 58, 49, 0.10);
+  }
+
+  .download-button:active,
+  .clinician-button:active {
     transform: scale(0.97);
   }
 
-  .download-button .material-symbols-rounded {
+  .download-button .material-symbols-rounded,
+  .clinician-button .material-symbols-rounded {
     font-size: 19px;
+  }
+
+  .download-button:focus-visible,
+  .clinician-button:focus-visible {
+    outline: 3px solid var(--md-primary);
+    outline-offset: 3px;
   }
 
   /* Phone position */
@@ -2221,12 +2266,22 @@
       font-size: 11px;
     }
 
-    .download-button {
+    .download-actions {
+      gap: 8px;
       margin-top: 11px;
+    }
 
-      padding: 10px 19px;
-
+    .download-button,
+    .clinician-button {
+      min-height: 42px;
+      padding: 10px 16px;
+      gap: 7px;
       font-size: 12px;
+    }
+
+    .download-button .material-symbols-rounded,
+    .clinician-button .material-symbols-rounded {
+      font-size: 17px;
     }
 
     .static-features {
@@ -2325,7 +2380,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     .phone-slot,
-    .download-button {
+    .download-button,
+    .clinician-button {
       transition: none;
     }
   }

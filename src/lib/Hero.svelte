@@ -1651,7 +1651,7 @@
       <div class="download-actions">
         <a
           class="download-button"
-          href="/downloads/patnub-ai.apk"
+          href="https://github.com/keiaa-75/patnub-ai-landing/releases/download/v1.0.0/patnub-ai.apk"
           download="patnub-ai.apk"
         >
           <span

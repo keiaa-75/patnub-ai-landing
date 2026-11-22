@@ -7,7 +7,9 @@
     - tonal color roles with confident primary/secondary contrast
     - expressive containment and contrasting shape families
     - a purposeful code symbol as the hero graphic
-    - restrained spring motion and shape morphing
+    - staggered spring typography with variable weight and width
+    - independently drifting, rotating decorative shape elements
+    - expressive shape morphing with distinct motion rhythms
 
   Only the event name and organizer attribution are displayed.
   No patnub.ai branding, kickers, slogans, or decorative microcopy.
@@ -109,6 +111,51 @@ function drawFlexText(ctx, text, x, baseline, size, weight, width, color) {
   return measured * width / 100;
 }
 
+/*
+  Each title line gets its own damped spring response. The pulse affects
+  vertical position, size, weight and variable width together, creating a
+  more tactile M3E-style typographic entrance without distorting the words.
+*/
+function drawSpringText(
+  ctx,
+  text,
+  x,
+  baseline,
+  size,
+  weight,
+  width,
+  color,
+  pulse,
+  {
+    lift = 16,
+    sizeResponse = 0.055,
+    weightResponse = 180,
+    widthResponse = 7.5
+  } = {}
+) {
+  const animatedSize = size * (1 + pulse * sizeResponse);
+  const animatedWeight = Math.max(
+    100,
+    Math.min(1000, weight + pulse * weightResponse)
+  );
+  const animatedWidth = Math.max(
+    88,
+    Math.min(108, width + pulse * widthResponse)
+  );
+  const animatedBaseline = baseline - pulse * lift;
+
+  return drawFlexText(
+    ctx,
+    text,
+    x,
+    animatedBaseline,
+    animatedSize,
+    animatedWeight,
+    animatedWidth,
+    color
+  );
+}
+
 function drawFourPointStar(ctx, x, y, size, rotation, color) {
   ctx.save();
   ctx.translate(x, y);
@@ -170,7 +217,7 @@ function morphShapePath(ctx, cx, cy, size, morph, rotation = 0) {
   ctx.closePath();
 }
 
-function drawCodeMark(ctx, cx, cy, scale, color, cursorVisible, pulse = 0) {
+function drawCodeMark(ctx, cx, cy, scale, color, pulse = 0) {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(scale * (1 + Math.max(0, pulse) * 0.025), scale);
@@ -199,12 +246,6 @@ function drawCodeMark(ctx, cx, cy, scale, color, cursorVisible, pulse = 0) {
   ctx.lineTo(184, 112);
   ctx.stroke();
 
-  if (cursorVisible) {
-    ctx.fillStyle = color;
-    roundedRectPath(ctx, 310, -30, 14, 78, 7);
-    ctx.fill();
-  }
-
   ctx.restore();
 }
 
@@ -217,7 +258,7 @@ function springPulse(time, phase = 0, period = 5.1) {
 function drawOrganizerCredit(ctx, time, animated) {
   const c = BREWCODE_COLORS;
   const pulse = animated ? springPulse(time, 0.9) : 0;
-  const lift = Math.max(0, pulse) * 3;
+  const lift = pulse * 7;
 
   // One contained attribution surface; no kicker or secondary slogan.
   ctx.save();
@@ -266,12 +307,13 @@ export function drawBrewCodeArtwork(ctx, time = 0, animated = true) {
   const c = BREWCODE_COLORS;
   const t = animated ? Math.max(0, time) : 0;
 
-  const titlePulse = animated ? springPulse(t, 0.05) : 0;
-  const shapePulse = animated ? springPulse(t, 0.35) : 0;
-  const dotPulseA = animated ? springPulse(t, 1.05) : 0;
-  const dotPulseB = animated ? springPulse(t, 1.4) : 0;
+  const brewPulse = animated ? springPulse(t, 0.02, 4.65) : 0;
+  const codePulse = animated ? springPulse(t, 0.17, 4.65) : 0;
+  const hackathonPulse = animated ? springPulse(t, 0.39, 4.9) : 0;
+  const shapePulse = animated ? springPulse(t, 0.35, 5.2) : 0;
+  const dotPulseA = animated ? springPulse(t, 1.05, 4.7) : 0;
+  const dotPulseB = animated ? springPulse(t, 1.4, 5.0) : 0;
 
-  const positiveTitlePulse = Math.max(0, titlePulse);
   const positiveShapePulse = Math.max(0, shapePulse);
 
   ctx.save();
@@ -281,42 +323,45 @@ export function drawBrewCodeArtwork(ctx, time = 0, animated = true) {
   ctx.fillStyle = c.surface;
   ctx.fillRect(0, 0, BREWCODE_ARTWORK_WIDTH, BREWCODE_ARTWORK_HEIGHT);
 
-  // Main event name: dramatic hierarchy, no kicker or supporting slogan.
-  const titleWeight = 835 + positiveTitlePulse * 135;
-  const titleWidth = 96 + positiveTitlePulse * 4.5;
+  // Main event name: each line gets a slightly staggered spring response.
   const titleSize = 222;
-
-  const brewWidth = drawFlexText(
+  const brewWidth = drawSpringText(
     ctx,
     'Brew',
     148,
     388,
     titleSize,
-    titleWeight,
-    titleWidth,
-    c.onSurface
+    835,
+    96,
+    c.onSurface,
+    brewPulse,
+    { lift: 17, sizeResponse: 0.06, widthResponse: 8, weightResponse: 190 }
   );
 
-  drawFlexText(
+  drawSpringText(
     ctx,
     'Code',
     148 + brewWidth + 13,
     388,
     titleSize,
-    Math.min(1000, titleWeight + 25),
-    Math.max(92, titleWidth - 1.5),
-    c.primary
+    860,
+    94.5,
+    c.primary,
+    codePulse,
+    { lift: 14, sizeResponse: 0.055, widthResponse: 7, weightResponse: 165 }
   );
 
-  drawFlexText(
+  drawSpringText(
     ctx,
     'Hackathon',
     146,
     635,
     226,
-    900 + positiveTitlePulse * 100,
-    94 + positiveTitlePulse * 3.5,
-    c.secondary
+    900,
+    94,
+    c.secondary,
+    hackathonPulse,
+    { lift: 20, sizeResponse: 0.052, widthResponse: 6.5, weightResponse: 145 }
   );
 
   // Organizer credit is intentionally the only supporting text.
@@ -327,15 +372,27 @@ export function drawBrewCodeArtwork(ctx, time = 0, animated = true) {
     a solid tonal backing shape and a large morphing Cookie-4 silhouette.
     These act as containment for the instantly recognizable code mark.
   */
-  const heroX = 1840;
-  const heroY = 525 + shapePulse * 7;
-  const heroRotation = -0.045 + shapePulse * 0.022;
-  const heroScale = 1 + positiveShapePulse * 0.027;
+  const heroDriftX = animated ? Math.sin(t * 0.68 + 0.35) * 24 : 0;
+  const heroDriftY = animated ? Math.sin(t * 0.92 + 0.8) * 18 : 0;
+  const heroX = 1840 + heroDriftX;
+  const heroY = 525 + heroDriftY + shapePulse * 10;
+  const heroRotation =
+    -0.045 +
+    shapePulse * 0.022 +
+    (animated ? Math.sin(t * 0.58) * 0.055 : 0);
+  const heroScale =
+    1 +
+    positiveShapePulse * 0.035 +
+    (animated ? Math.sin(t * 0.82 + 0.4) * 0.012 : 0);
 
-  // Secondary tonal backing: asymmetrical rounded rectangle, no gradient.
+  // Secondary tonal backing floats on a slower, independent path.
+  const backingX = animated ? Math.sin(t * 0.48 + 0.9) * 32 : 0;
+  const backingY = animated ? Math.cos(t * 0.62 + 0.2) * 22 : 0;
+  const backingRotation =
+    -0.105 + (animated ? Math.sin(t * 0.44 + 0.5) * 0.045 : 0);
   ctx.save();
-  ctx.translate(heroX - 28, heroY + 26);
-  ctx.rotate(-0.105);
+  ctx.translate(heroX - 28 + backingX, heroY + 26 + backingY);
+  ctx.rotate(backingRotation);
   drawShadowedShape(
     ctx,
     () => fillRoundedRect(ctx, -300, -300, 600, 600, 112, c.secondaryContainer),
@@ -378,39 +435,65 @@ export function drawBrewCodeArtwork(ctx, time = 0, animated = true) {
     0,
     0.72,
     c.onPrimary,
-    !animated || Math.floor(t * 1.1) % 2 === 0,
     shapePulse
   );
 
   ctx.restore();
 
-  // A contained tertiary accent overlaps the main shape edge.
-  const accentX = 2132 + dotPulseA * 8;
-  const accentY = 276 - dotPulseA * 9;
-  const accentSize = 116 + Math.max(0, dotPulseA) * 10;
+  // A contained tertiary accent travels on its own small elliptical orbit.
+  const accentPhase = t * 0.76 + 0.65;
+  const accentX =
+    2132 + (animated ? Math.sin(accentPhase) * 27 : 0) + dotPulseA * 8;
+  const accentY =
+    276 + (animated ? Math.cos(accentPhase * 0.86) * 34 : 0) - dotPulseA * 9;
+  const accentSize =
+    116 + Math.max(0, dotPulseA) * 12 + (animated ? Math.sin(t * 1.15) * 4 : 0);
 
   ctx.save();
   ctx.translate(accentX, accentY);
-  ctx.rotate(0.18 + dotPulseA * 0.12);
+  ctx.rotate(0.18 + dotPulseA * 0.12 + (animated ? Math.sin(t * 0.7) * 0.16 : 0));
   drawShadowedShape(
     ctx,
-    () => fillRoundedRect(ctx, -accentSize / 2, -accentSize / 2, accentSize, accentSize, 38 + Math.max(0, dotPulseA) * 25, c.tertiaryContainer),
+    () => fillRoundedRect(
+      ctx,
+      -accentSize / 2,
+      -accentSize / 2,
+      accentSize,
+      accentSize,
+      38 + Math.max(0, dotPulseA) * 25,
+      c.tertiaryContainer
+    ),
     c.tertiaryContainer,
     'rgba(0, 73, 66, 0.12)'
   );
-  drawFourPointStar(ctx, 0, 0, 32 + Math.max(0, dotPulseA) * 5, dotPulseA * 0.14, c.tertiary);
+  drawFourPointStar(
+    ctx,
+    0,
+    0,
+    32 + Math.max(0, dotPulseA) * 5,
+    dotPulseA * 0.14 + (animated ? t * 0.22 : 0),
+    c.tertiary
+  );
   ctx.restore();
 
-  // A small blue circle balances the composition without adding more text.
-  const orbitX = 1514;
-  const orbitY = 760 + dotPulseB * 10;
-  drawCircle(ctx, orbitX, orbitY, 29 + Math.max(0, dotPulseB) * 5, c.secondary);
-  drawCircle(ctx, orbitX + 53, orbitY + 22, 13, c.primary);
-  drawCircle(ctx, orbitX + 30, orbitY + 63, 9, c.tertiary);
+  // A small three-dot orbit balances the composition without adding text.
+  const orbitPhase = t * 0.58 + 0.4;
+  const orbitX = 1514 + (animated ? Math.cos(orbitPhase) * 42 : 0);
+  const orbitY =
+    760 + (animated ? Math.sin(orbitPhase) * 25 : 0) + dotPulseB * 10;
+  ctx.save();
+  ctx.translate(orbitX, orbitY);
+  ctx.rotate(animated ? Math.sin(t * 0.42) * 0.16 : 0);
+  drawCircle(ctx, 0, 0, 29 + Math.max(0, dotPulseB) * 5, c.secondary);
+  drawCircle(ctx, 53, 22, 13, c.primary);
+  drawCircle(ctx, 30, 63, 9, c.tertiary);
+  ctx.restore();
 
-  // Four-dot shape cluster: each dot responds with a staggered spring.
-  const clusterX = 2075;
-  const clusterY = 850;
+  // Four-dot shape cluster: the group drifts and turns while its dots spring in sequence.
+  const clusterX =
+    2075 + (animated ? Math.sin(t * 0.51 + 1.2) * 31 : 0);
+  const clusterY =
+    850 + (animated ? Math.cos(t * 0.67 + 0.2) * 22 : 0);
   const dots = [
     { x: 0, y: 0, r: 16, color: c.primary, phase: 0.2 },
     { x: 48, y: 0, r: 22, color: c.secondary, phase: 0.5 },
@@ -418,19 +501,24 @@ export function drawBrewCodeArtwork(ctx, time = 0, animated = true) {
     { x: 48, y: 47, r: 10, color: c.primary, phase: 1.1 }
   ];
 
+  ctx.save();
+  ctx.translate(clusterX, clusterY);
+  ctx.rotate(animated ? Math.sin(t * 0.46 + 0.9) * 0.14 : 0);
   for (const dot of dots) {
-    const pulse = animated ? springPulse(t, dot.phase) : 0;
-    const radius = dot.r * (1 + Math.max(0, pulse) * 0.17);
-    drawCircle(ctx, clusterX + dot.x, clusterY + dot.y - pulse * 5, radius, dot.color);
+    const pulse = animated ? springPulse(t, dot.phase, 4.8) : 0;
+    const radius = dot.r * (1 + Math.max(0, pulse) * 0.2);
+    const drift = animated ? Math.sin(t * 0.78 + dot.phase) * 7 : 0;
+    drawCircle(ctx, dot.x + drift, dot.y - pulse * 7, radius, dot.color);
   }
+  ctx.restore();
 
-  // A final sparkle is a single expressive punctuation mark, not a label.
+  // A final sparkle gently wanders and rotates like the page's M3E accents.
   drawFourPointStar(
     ctx,
-    1480,
-    238 + shapePulse * 5,
+    1480 + (animated ? Math.sin(t * 0.72 + 0.8) * 34 : 0),
+    238 + (animated ? Math.cos(t * 0.61 + 0.4) * 23 : 0) + shapePulse * 5,
     25 + positiveShapePulse * 7,
-    -0.25 + shapePulse * 0.16,
+    -0.25 + shapePulse * 0.16 + (animated ? t * 0.12 : 0),
     c.tertiary
   );
 

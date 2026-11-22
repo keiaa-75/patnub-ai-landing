@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg width="214.29" height="217.44" viewBox="0 0 214.29 217.44" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(20 20)">
+    <g transform="scale(1 1)">
+      <path d="M39.8666 0C17.6311 2.26838 0 25.179 0 54.668C0 81.8885 16.5827 94.1921 33.4277 103.266C37.9197 105.534 27.1766 115.914 22.6846 126.122C19.8771 131.793 22.6846 134.628 27.1766 131.793C37.8452 124.988 51.3212 117.048 58.0592 113.079C60.3052 111.945 62.5512 112.512 65.9202 112.738C65.9202 112.738 91.7492 113.419 91.7492 113.419C125.439 113.646 135.122 108.353 146.419 104.092C164.58 95.0862 174.29 76.2176 174.29 54.668C174.29 25.179 160.477 4.53676 136.445 0.453674" fill="none" stroke-width="18" stroke="#247D7B" stroke-linecap="round" stroke-linejoin="round" transform="matrix(1 0 0 1 0 44.535)" />
+      <path d="M0 20.9547C0.892315 10.3659 25.431 0 54.4312 0C83.4314 0 107.97 10.3659 108.528 20.9547C108.528 27.085 101.278 42.6896 96.8161 48.2626C93.4699 53.2784 89.0084 54.7274 84.5468 54.1701C75.6236 52.944 65.5851 52.4981 54.4312 52.4981C43.2772 52.4981 33.2387 53.2784 24.3156 54.6159C18.7386 55.2847 14.277 53.2784 11.4885 48.8199C7.58467 42.1323 0 27.085 0 20.9547Z" fill="none" stroke-width="15" stroke="#247D7B" stroke-linecap="round" stroke-linejoin="round" transform="matrix(1 0 0 1 33.408 0)" />
+      <path d="M9.58599 -4.19617e-05L9.58599 18.4453M-3.8147e-05 9.24021L18.9673 9.24021" fill="none" stroke-width="8" stroke="#247D7B" stroke-linecap="round" stroke-linejoin="round" transform="matrix(1 0 0 1 77.75 17.171)" />
+      <path d="M0 12.4219C0.322231 4.17727 5.90759 0 13.4263 0C20.9451 0 26.5304 4.17727 27.0675 12.4219" fill="none" stroke-width="12" stroke="#247D7B" stroke-linecap="round" stroke-linejoin="round" transform="matrix(1 0 0 1 41.614 92.931)" />
+      <path d="M0 12.4851C0.331261 4.19852 6.07313 0 13.913 0C21.6424 0 27.3843 4.19852 27.826 12.4851" fill="none" stroke-width="12" stroke="#247D7B" stroke-linecap="round" stroke-linejoin="round" transform="matrix(1 0 0 1 104.951 92.864)" />
+    </g>
+  </g>
+</svg>

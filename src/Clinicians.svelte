@@ -17,11 +17,13 @@
       patnub<span>.ai</span>
     </a>
 
-    <a class="back-link" href="/">
-      <span class="material-symbols-rounded" aria-hidden="true">
-        arrow_back
+    <a class="back-link" href="/" aria-label="Back to the patient app">
+      <span class="back-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
       </span>
-      Patient app
+      <span>Patient app</span>
     </a>
   </header>
 
@@ -152,21 +154,70 @@
   .back-link {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 
-    color: var(--muted);
+    min-height: 44px;
+    padding: 5px 17px 5px 7px;
+    border: 1px solid #c4e0da;
+    border-radius: 999px;
+
+    color: #246b65;
+    background: #e4f1ee;
     font-size: 14px;
     font-weight: 600;
+    letter-spacing: -0.01em;
     text-decoration: none;
 
+    box-shadow: 0 1px 0 rgba(26, 85, 73, 0.06);
     transition:
-      color 160ms ease,
-      transform 160ms ease;
+      background 180ms ease,
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .back-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--primary);
+    transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .back-icon svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .back-link:hover {
-    color: var(--primary-strong);
+    border-color: #a7d1c8;
+    color: #185c55;
+    background: #d7ebe6;
+    box-shadow: 0 3px 12px rgba(22, 97, 82, 0.10);
     transform: translateX(-2px);
+  }
+
+  .back-link:hover .back-icon {
+    transform: translateX(-2px);
+  }
+
+  .back-link:active {
+    transform: translateX(-1px) scale(0.98);
+  }
+
+  .back-link:focus-visible {
+    outline: 3px solid rgba(14, 143, 126, 0.3);
+    outline-offset: 3px;
   }
 
   /* Main content */
@@ -249,8 +300,20 @@
     }
 
     .back-link {
-      gap: 5px;
+      min-height: 38px;
+      gap: 7px;
+      padding: 4px 11px 4px 5px;
       font-size: 12px;
+    }
+
+    .back-icon {
+      width: 28px;
+      height: 28px;
+    }
+
+    .back-icon svg {
+      width: 16px;
+      height: 16px;
     }
 
     .hero {

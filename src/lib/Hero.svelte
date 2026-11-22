@@ -38,8 +38,25 @@
     ? new URLSearchParams()
     : new URLSearchParams(window.location.search);
 
-  const NO_SHAPES = FLAGS.has('noshapes');
-  const NO_3D = FLAGS.has('no3d');
+  const PHONE_DEBUG_VIEW = FLAGS.get('phoneview');
+
+  const PHONE_DEBUG_POSES = {
+    front: { yaw: 0, pitch: 0, roll: -2 },
+    back: { yaw: 180, pitch: 0, roll: -2 },
+    left: { yaw: -90, pitch: 0, roll: -2 },
+    right: { yaw: 90, pitch: 0, roll: -2 },
+    top: { yaw: 0, pitch: -90, roll: 0 },
+    bottom: { yaw: 0, pitch: 90, roll: 0 },
+    angle: { yaw: 34, pitch: 12, roll: -5 }
+  };
+
+  const PHONE_DEBUG_POSE = Object.hasOwn(PHONE_DEBUG_POSES, PHONE_DEBUG_VIEW)
+    ? PHONE_DEBUG_POSES[PHONE_DEBUG_VIEW]
+    : null;
+
+  const PHONE_DEBUG = Boolean(PHONE_DEBUG_POSE);
+  const NO_SHAPES = FLAGS.has('noshapes') || PHONE_DEBUG;
+  const NO_3D = FLAGS.has('no3d') || PHONE_DEBUG;
 
   const T = (beat, fraction = 0) =>
     (beat + fraction) / BEATS;
@@ -192,6 +209,9 @@
 
     /*
       Lazy-load the 3D device.
+
+      The CSS inspection views and ?no3d mode deliberately skip
+      this import so the fallback can be examined independently.
     */
 
     if (NO_3D) {
@@ -400,7 +420,6 @@
               lastBeat = currentBeat;
 
               shapes?.goTo(currentBeat);
-
             }
 
             wobble.target = clamp(
@@ -1240,22 +1259,96 @@
       };
     };
 
+    /*
+      Fixed-angle inspection mode.
+
+      ?phoneview=front
+      ?phoneview=back
+      ?phoneview=left
+      ?phoneview=right
+      ?phoneview=top
+      ?phoneview=bottom
+      ?phoneview=angle
+
+      This mode uses a static CSS phone and does not construct
+      the normal scroll-driven story.
+    */
+
+    const buildPhoneInspection = () => {
+      reduced = false;
+      screen = 0;
+      step = 0;
+
+      const hiddenContent = [
+        problem,
+        tagline,
+        featureCopy,
+        downloadCopy,
+        scrollHint,
+        contactShadow
+      ].filter(Boolean);
+
+      gsap.set(hiddenContent, {
+        autoAlpha: 0
+      });
+
+      gsap.set(phoneSlot, {
+        x: 0,
+        y: 0,
+        z: 0,
+        rotationY: PHONE_DEBUG_POSE.yaw,
+        rotationX: PHONE_DEBUG_POSE.pitch,
+        rotationZ: PHONE_DEBUG_POSE.roll,
+        scale: 0.92,
+        transformOrigin: '50% 50%'
+      });
+
+      const debugYaw = PHONE_DEBUG_POSE.yaw * Math.PI / 180;
+
+      phoneSlot.style.setProperty(
+        '--sheen',
+        `${50 + Math.sin(debugYaw) * 26}%`
+      );
+
+      phoneSlot.style.setProperty(
+        '--glass-pos',
+        `${50 + Math.sin(debugYaw) * 18}%`
+      );
+
+      return () => {
+        gsap.set(phoneSlot, {
+          clearProps: 'transform'
+        });
+
+        phoneSlot.style.removeProperty('--sheen');
+        phoneSlot.style.removeProperty('--glass-pos');
+
+        gsap.set(hiddenContent, {
+          clearProps: 'opacity,visibility'
+        });
+      };
+    };
+
     const media = gsap.matchMedia();
 
-    media.add(
-      '(min-width: 768px) and (prefers-reduced-motion: no-preference)',
-      () => buildStory(true)
-    );
+    if (PHONE_DEBUG) {
+      media.add('(min-width: 0px)', buildPhoneInspection);
+    } else {
+      media.add(
+        '(min-width: 768px) and (prefers-reduced-motion: no-preference)',
+        () => buildStory(true)
+      );
 
-    media.add(
-      '(max-width: 767px) and (prefers-reduced-motion: no-preference)',
-      () => buildStory(false)
-    );
+      media.add(
+        '(max-width: 767px) and (prefers-reduced-motion: no-preference)',
+        () => buildStory(false)
+      );
 
-    media.add(
-      '(prefers-reduced-motion: reduce)',
-      buildReducedMotion
-    );
+      media.add(
+        '(prefers-reduced-motion: reduce)',
+        buildReducedMotion
+      );
+    }
 
     /*
       Component cleanup.
@@ -1268,7 +1361,6 @@
         'resize',
         updateDeviceHeight
       );
-
     };
   });
 </script>
@@ -1279,6 +1371,7 @@
   style={`--beats: ${BEATS}`}
   bind:this={scene}
   class:reduced-motion={reduced}
+  class:phone-debug={PHONE_DEBUG}
   aria-label="How patnub.ai helps you understand your health"
 >
   <div
@@ -1297,6 +1390,12 @@
       <Shapes bind:this={shapes} beats={BEATS} />
     {/if}
 
+    {#if PHONE_DEBUG}
+      <div class="phone-debug-label" aria-hidden="true">
+        CSS PHONE · {PHONE_DEBUG_VIEW.toUpperCase()} VIEW
+      </div>
+    {/if}
+
     <!-- Opening question -->
     <div class="copy problem scheme-peach" bind:this={problem}>
       <h1>Want to understand your health better?</h1>
@@ -1304,10 +1403,11 @@
 
     <!-- Hero -->
     <div class="copy tagline scheme-teal" bind:this={tagline}>
-      <h2>Say hi to patnub.ai</h2>
+      <h2>Say hi to patnub.ai!</h2>
 
       <p class="sub">
-        Explore health topics, understand medicines, and keep important health information close. Use it online or offline.
+        Explore health topics, understand medicines, and keep important
+        health information close. Use it online or offline.
       </p>
     </div>
 
@@ -1431,22 +1531,17 @@
 
   .scene {
     position: relative;
-
     height: calc((var(--beats) + 1) * 100svh);
   }
 
   .stage {
     position: sticky;
     top: 0;
-
     width: 100%;
     height: 100svh;
-
     overflow: hidden;
-
     perspective: 1180px;
     perspective-origin: 50% 50%;
-
     isolation: isolate;
   }
 
@@ -1480,9 +1575,7 @@
   .backdrop {
     position: absolute;
     inset: 0;
-
     z-index: 0;
-
     pointer-events: none;
   }
 
@@ -1509,19 +1602,12 @@
 
   .copy {
     position: absolute;
-
     inset-block: 0;
-
     height: fit-content;
-
     margin-block: auto;
-
     left: 8%;
-
     z-index: 8;
-
     width: min(39%, 520px);
-
     color: var(--stage-ink);
   }
 
@@ -1543,70 +1629,48 @@
     inset-block:
       clamp(55px, 9svh, 92px)
       clamp(90px, 15svh, 150px);
-
     right: 0;
     left: 0;
-
     width: min(88%, 1180px);
-
     display: flex;
-
     align-items: center;
     justify-content: center;
-
     margin-inline: auto;
-
     text-align: center;
   }
 
   .problem h1 {
     max-width: 15ch;
-
     margin: 0 auto;
-
     font-size: clamp(2.8rem, 7.2vw, 7.2rem);
-
     line-height: 0.98;
-
     text-wrap: balance;
-
     opacity: 0;
   }
 
   .feature-copy {
     right: 10%;
     left: auto;
-
     width: min(34%, 480px);
   }
 
   h1,
   h2 {
     margin: 0 0 18px;
-
     color: var(--stage-ink);
-
     font-family: var(--font-display);
-
     font-size: clamp(2.6rem, 4.6vw, 4.6rem);
-
     font-weight: 600;
-
     letter-spacing: -0.04em;
     line-height: 0.99;
-
     text-wrap: balance;
   }
 
   .sub {
     max-width: 39ch;
-
     margin: 0;
-
     color: var(--stage-muted);
-
     font-size: clamp(1rem, 1.25vw, 1.15rem);
-
     line-height: 1.65;
   }
 
@@ -1614,68 +1678,44 @@
 
   .download-copy {
     inset-block: auto;
-
     top: clamp(22px, 3.5svh, 42px);
-
     right: 0;
     left: 0;
-
     width: min(90%, 760px);
-
     height: auto;
-
     margin: 0 auto;
-
     text-align: center;
   }
 
   .download-copy h2 {
     max-width: 100%;
-
     margin: 0 0 8px;
-
     font-size: clamp(1.9rem, 4vw, 3.2rem);
-
     line-height: 1;
   }
 
   .download-copy .sub {
     max-width: 54ch;
-
     margin-inline: auto;
-
     font-size: clamp(0.82rem, 1.1vw, 0.98rem);
-
     line-height: 1.45;
   }
 
   .download-button {
     display: inline-flex;
-
     align-items: center;
     justify-content: center;
-
     gap: 9px;
-
     margin-top: 12px;
-
     padding: 11px 22px;
-
     border: 0;
     border-radius: 999px;
-
     background: var(--md-primary-strong);
-
     color: #ffffff;
-
     font-size: 14px;
     font-weight: 700;
-
     text-decoration: none;
-
-    box-shadow:
-      0 8px 22px rgba(14, 98, 87, 0.16);
-
+    box-shadow: 0 8px 22px rgba(14, 98, 87, 0.16);
     transition:
       transform 180ms ease,
       background 180ms ease,
@@ -1684,11 +1724,8 @@
 
   .download-button:hover {
     transform: translateY(-3px);
-
     background: #075b50;
-
-    box-shadow:
-      0 12px 26px rgba(14, 98, 87, 0.22);
+    box-shadow: 0 12px 26px rgba(14, 98, 87, 0.22);
   }
 
   .download-button:active {
@@ -1703,31 +1740,18 @@
 
   .phone-slot {
     position: absolute;
-
     top: 50%;
     left: 50%;
-
     z-index: 6;
-
     width: var(--phone-w);
-
     height: calc(var(--phone-w) * 19.5 / 9);
-
     margin-left: calc(var(--phone-w) / -2);
-
-    margin-top: calc(
-      var(--phone-w) * 19.5 / 9 / -2
-    );
-
+    margin-top: calc(var(--phone-w) * 19.5 / 9 / -2);
     display: block;
-
     opacity: 0;
     visibility: hidden;
-
     transform-style: preserve-3d;
-
     pointer-events: none;
-
     transition:
       opacity 220ms ease,
       visibility 0s linear 220ms;
@@ -1736,7 +1760,6 @@
   .phone-slot.css-fallback {
     opacity: 1;
     visibility: visible;
-
     transition:
       opacity 220ms ease,
       visibility 0s linear;
@@ -1751,22 +1774,14 @@
 
   .contact-shadow {
     position: absolute;
-
     top: 0;
     left: 0;
-
     z-index: 2;
-
     height: 40px;
-
     border-radius: 50%;
-
     background: rgba(25, 69, 57, 0.14);
-
     filter: blur(18px);
-
     opacity: 0;
-
     pointer-events: none;
   }
 
@@ -1774,41 +1789,28 @@
 
   .scroll-hint {
     position: absolute;
-
     left: clamp(20px, 8%, 100px);
-
     bottom: max(
       20px,
       calc(env(safe-area-inset-bottom) + 14px)
     );
-
     z-index: 10;
-
     display: flex;
-
     align-items: center;
     justify-content: flex-start;
-
     gap: 9px;
-
     width: fit-content;
-
     color: var(--stage-muted);
-
     font-size: 9px;
     font-weight: 700;
-
     letter-spacing: 0.15em;
-
     pointer-events: none;
   }
 
   .hint-line {
     width: 30px;
     height: 1px;
-
     background: var(--stage-accent);
-
     opacity: 0.5;
   }
 
@@ -1821,53 +1823,39 @@
 
   .static-features {
     position: absolute;
-
     top: 34%;
     left: 8%;
-
     z-index: 8;
-
     width: min(44%, 550px);
-
     display: grid;
-
     gap: 13px;
   }
 
   .static-features article {
     padding: 13px 16px;
-
     border: 1px solid var(--md-outline-variant);
     border-radius: 18px;
-
     background: rgba(255, 255, 255, 0.8);
   }
 
   .static-number {
     color: var(--md-primary);
-
     font-size: 10px;
     font-weight: 700;
-
     letter-spacing: 0.1em;
   }
 
   .static-features h3 {
     margin: 4px 0;
-
     color: var(--md-on-surface);
-
     font-family: var(--font-display);
-
     font-size: 19px;
     font-weight: 500;
   }
 
   .static-features p {
     margin: 0;
-
     color: var(--md-on-surface-variant);
-
     font-size: 12px;
     line-height: 1.5;
   }
@@ -1878,13 +1866,9 @@
 
   .reduced-motion .stage {
     position: relative;
-
     min-height: 1400px;
-
     padding-top: 90px;
-
     overflow: hidden;
-
     background: #ffffff;
   }
 
@@ -1902,59 +1886,43 @@
   .reduced-motion .copy.problem,
   .reduced-motion .copy.tagline {
     position: relative;
-
     inset: auto;
-
     width: auto;
     height: auto;
-
     margin: 0 7% 26px;
-
     visibility: visible;
     opacity: 1;
-
     text-align: left;
   }
 
   .reduced-motion .problem h1 {
     max-width: 18ch;
-
     margin: 0;
-
     font-size: clamp(2.4rem, 5vw, 4.4rem);
-
     opacity: 1;
   }
 
   .reduced-motion .static-features {
     top: 34%;
     left: 7%;
-
     width: min(46%, 560px);
   }
 
   .reduced-motion .download-copy {
     top: auto;
-
     right: auto;
     bottom: 55px;
     left: 7%;
-
     width: min(44%, 520px);
-
     height: auto;
-
     margin: 0;
-
     visibility: visible;
     opacity: 1;
-
     text-align: left;
   }
 
   .reduced-motion .download-copy h2 {
     max-width: 15ch;
-
     font-size: clamp(2rem, 4vw, 3.2rem);
   }
 
@@ -1965,13 +1933,54 @@
   .reduced-motion .phone-slot {
     top: 65%;
     left: 74%;
-
     opacity: 1;
     visibility: visible;
-
     transform: rotateZ(90deg) scale(0.72);
-
     transition: none;
+  }
+
+  /* Fixed-angle CSS phone inspection mode: ?phoneview=front/back/left/right/top/bottom/angle */
+
+  .phone-debug {
+    height: 100svh;
+  }
+
+  .phone-debug .stage {
+    position: relative;
+    height: 100svh;
+  }
+
+  .phone-debug .bg-peach {
+    background: #edf2ef;
+  }
+
+  .phone-debug .copy,
+  .phone-debug .scroll-hint,
+  .phone-debug .contact-shadow {
+    display: none !important;
+  }
+
+  .phone-debug .phone-slot {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .phone-debug-label {
+    position: absolute;
+    top: max(18px, env(safe-area-inset-top));
+    left: 50%;
+    z-index: 30;
+    padding: 8px 13px;
+    transform: translateX(-50%);
+    border: 1px solid rgba(105, 125, 114, .22);
+    border-radius: 999px;
+    background: rgba(245, 250, 247, .84);
+    color: #52645a;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .13em;
+    white-space: nowrap;
+    pointer-events: none;
   }
 
   /* Medium desktop */
@@ -2004,28 +2013,21 @@
       inset-block:
         clamp(80px, 12svh, 110px)
         clamp(90px, 14svh, 120px);
-
       right: 0;
       left: 0;
-
       width: 86%;
-
       margin: auto;
     }
 
     .problem h1 {
       max-width: 15ch;
-
       font-size: clamp(2.25rem, 10vw, 3.4rem);
     }
 
     .copy {
       inset-block: auto;
-
       top: clamp(96px, 14svh, 130px);
-
       margin-block: 0;
-
       left: 7%;
       width: 86%;
     }
@@ -2039,22 +2041,18 @@
     .copy.feature-copy {
       right: auto;
       left: 7%;
-
       width: 86%;
     }
 
     h1,
     h2 {
       max-width: 12ch;
-
       margin-bottom: 12px;
-
       font-size: clamp(2.3rem, 9.5vw, 3.2rem);
     }
 
     .sub {
       max-width: 35ch;
-
       font-size: 13px;
       line-height: 1.55;
     }
@@ -2062,42 +2060,34 @@
     .download-copy {
       top: 22px;
       left: 5%;
-
       width: 90%;
     }
 
     .download-copy h2 {
       max-width: 100%;
-
       font-size: clamp(1.8rem, 7.5vw, 2.5rem);
     }
 
     .download-copy .sub {
       max-width: 34ch;
-
       font-size: 11px;
     }
 
     .download-button {
       margin-top: 11px;
-
       padding: 10px 19px;
-
       font-size: 12px;
     }
 
     .static-features {
       top: 12%;
       left: 7%;
-
       width: 86%;
-
       gap: 8px;
     }
 
     .static-features article {
       padding: 9px 12px;
-
       border-radius: 14px;
     }
 
@@ -2116,14 +2106,12 @@
     .reduced-motion .static-features {
       top: 30%;
       left: 7%;
-
       width: 86%;
     }
 
     .reduced-motion .phone-slot {
       top: 68%;
       left: 50%;
-
       transform: rotateZ(90deg) scale(0.66);
     }
 
@@ -2131,7 +2119,6 @@
       right: 7%;
       bottom: 40px;
       left: 7%;
-
       width: auto;
     }
   }

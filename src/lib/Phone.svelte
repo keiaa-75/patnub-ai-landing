@@ -61,39 +61,43 @@
   <div class="face back">
     <div class="back-brush" aria-hidden="true"></div>
 
-    <div class="camera-island" aria-hidden="true">
-      <span class="rear-lens lens-one"></span>
-      <span class="rear-lens lens-two"></span>
-      <span class="rear-lens lens-three"></span>
-      <span class="flash"></span>
-      <span class="sensor"></span>
-      <span class="focus-sensor"></span>
+    <!-- Individual raised camera rings; no shared camera island. -->
+    <div class="camera-array" aria-hidden="true">
+      <span class="camera-module main-lens lens-one">
+        <span class="camera-glass"></span>
+      </span>
+      <span class="camera-module main-lens lens-two">
+        <span class="camera-glass"></span>
+      </span>
+      <span class="camera-module main-lens lens-three">
+        <span class="camera-glass"></span>
+      </span>
+      <span class="camera-module small-lens lens-four">
+        <span class="camera-glass"></span>
+      </span>
+      <span class="camera-module small-lens lens-five">
+        <span class="camera-glass"></span>
+      </span>
+      <span class="camera-flash"></span>
     </div>
-
-    <div class="back-brand" aria-hidden="true">
-      <span class="brand-name">PATNUB.AI</span>
-      <span class="brand-caption">HEALTH, MADE CLEARER</span>
-    </div>
-
-    <div class="back-seam" aria-hidden="true"></div>
   </div>
 
-  <!-- Left and right side rails. These sit between the two glass faces. -->
+  <!-- Left and right side rails. -->
   <div class="edge edge-left" aria-hidden="true">
     <span class="antenna antenna-top"></span>
     <span class="antenna antenna-bottom"></span>
-    <span class="sim-outline"></span>
   </div>
 
   <div class="edge edge-right" aria-hidden="true">
-    <span class="side-button volume-up"></span>
-    <span class="side-button volume-down"></span>
-    <span class="side-button power"></span>
+    <span class="side-button volume-rocker">
+      <span class="rocker-seam"></span>
+    </span>
+    <span class="side-button power-button"></span>
     <span class="antenna antenna-top"></span>
     <span class="antenna antenna-bottom"></span>
   </div>
 
-  <!-- Top and bottom rails complete the metal perimeter. -->
+  <!-- Top and bottom rails. -->
   <div class="edge edge-top" aria-hidden="true">
     <span class="antenna antenna-left"></span>
     <span class="antenna antenna-right"></span>
@@ -154,8 +158,7 @@
 
     /*
       Do not put filter, opacity, isolation, or overflow here.
-      Those grouping properties can flatten the 3D descendants
-      and make the back and side rails disappear.
+      Those grouping properties can flatten the 3D descendants.
     */
   }
 
@@ -216,138 +219,150 @@
       );
   }
 
-  .camera-island {
-    position: absolute;
-    top: clamp(14px, calc(var(--phone-w) * .055), 22px);
-    left: clamp(12px, calc(var(--phone-w) * .05), 20px);
-    width: clamp(45px, calc(var(--phone-w) * .18), 60px);
-    height: clamp(142px, calc(var(--phone-w) * .52), 178px);
-    border: 1px solid rgba(68, 79, 72, .42);
-    border-radius: 19px;
-    background:
-      linear-gradient(145deg,
-        rgba(255,255,255,.72),
-        rgba(255,255,255,.08) 34%,
-        rgba(56,68,60,.16) 100%),
-      linear-gradient(145deg, #c8d1cb, #8e9a93);
-    box-shadow:
-      inset 0 1px 1px rgba(255,255,255,.76),
-      inset 0 -1px 2px rgba(46,57,50,.25),
-      0 2px 5px rgba(35,48,41,.19),
-      0 0 0 1px rgba(255,255,255,.18);
-  }
+  /*
+    Individual camera rings sit directly on the rear panel.
+    There is no shared raised camera island.
+  */
 
-  .camera-island::before {
+  .camera-array {
     position: absolute;
-    inset: 4px;
-    content: '';
-    border: 1px solid rgba(255,255,255,.24);
-    border-radius: 15px;
+    inset: 0;
+    z-index: 2;
     pointer-events: none;
   }
 
-  .rear-lens {
+  .camera-module {
     position: absolute;
-    left: 50%;
-    width: clamp(28px, calc(var(--phone-w) * .112), 36px);
-    height: clamp(28px, calc(var(--phone-w) * .112), 36px);
-    transform: translateX(-50%);
-    border: 2px solid #65716a;
+    display: block;
+    aspect-ratio: 1;
+    border: 1px solid rgba(55, 65, 58, .76);
     border-radius: 50%;
     background:
-      radial-gradient(circle at 31% 24%,
-        rgba(178,211,211,.96) 0 4%,
-        #5e7b7e 9%,
-        #203a40 22%,
-        #071216 47%,
-        #263338 66%,
-        #030708 100%);
+      radial-gradient(circle,
+        #071012 0 42%,
+        #1e3034 44% 49%,
+        #59665f 51% 55%,
+        #e5eae5 58% 64%,
+        #87938b 67% 72%,
+        #e8ece7 75% 79%,
+        #647168 83% 89%,
+        #c6cec7 93% 100%);
     box-shadow:
-      inset 0 0 0 2px #29383a,
-      inset 0 0 7px 2px rgba(0,0,0,.82),
-      0 0 0 2px rgba(225,233,227,.72),
-      0 1px 3px rgba(0,0,0,.4);
+      0 2px 4px rgba(23, 32, 26, .32),
+      0 0 0 1px rgba(255, 255, 255, .58),
+      inset 0 1px 1px rgba(255, 255, 255, .9),
+      inset 0 -2px 3px rgba(27, 38, 30, .32);
   }
 
-  .rear-lens::before {
+  .camera-module::before {
     position: absolute;
-    top: 5px;
-    left: 6px;
-    width: 7px;
-    height: 4px;
+    inset: 7%;
+    content: '';
+    border: 1px solid rgba(34, 45, 39, .68);
+    border-radius: 50%;
+    box-shadow:
+      inset 0 1px 2px rgba(0, 0, 0, .72),
+      0 0 0 1px rgba(255, 255, 255, .45);
+    pointer-events: none;
+  }
+
+  .camera-glass {
+    position: absolute;
+    inset: 19%;
+    display: block;
+    overflow: hidden;
+    border: 1px solid rgba(4, 11, 13, .95);
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 31% 25%,
+        rgba(190, 222, 222, .9) 0 3%,
+        rgba(91, 126, 130, .8) 7%,
+        transparent 17%),
+      radial-gradient(circle at 50% 55%,
+        #020607 0 43%,
+        #13272c 57%,
+        #061014 75%,
+        #010405 100%);
+    box-shadow:
+      inset 0 0 4px 1px rgba(0, 0, 0, .92),
+      inset 0 1px 2px rgba(202, 235, 232, .2),
+      0 0 0 1px rgba(15, 27, 28, .7);
+  }
+
+  .camera-glass::before {
+    position: absolute;
+    top: 13%;
+    left: 18%;
+    width: 29%;
+    height: 12%;
     content: '';
     transform: rotate(-38deg);
     border-radius: 50%;
-    background: rgba(219,245,242,.38);
-    filter: blur(.4px);
+    background: rgba(218, 242, 238, .52);
+    filter: blur(.6px);
   }
 
-  .lens-one { top: 11px; }
-  .lens-two { top: 57px; }
-  .lens-three { top: 103px; }
+  .main-lens {
+    width: clamp(22px, calc(var(--phone-w) * .195), 56px);
+  }
 
-  .flash,
-  .sensor,
-  .focus-sensor {
+  .small-lens {
+    width: clamp(17px, calc(var(--phone-w) * .145), 42px);
+  }
+
+  /* Three larger lenses form the left column. */
+
+  .lens-one {
+    left: 18.8%;
+    top: 9.8%;
+    transform: translate(-50%, -50%);
+  }
+
+  .lens-two {
+    left: 18.8%;
+    top: 20.9%;
+    transform: translate(-50%, -50%);
+  }
+
+  .lens-three {
+    left: 18.8%;
+    top: 32%;
+    transform: translate(-50%, -50%);
+  }
+
+  /* Two smaller camera modules form the right column. */
+
+  .lens-four {
+    left: 40.5%;
+    top: 9.8%;
+    transform: translate(-50%, -50%);
+  }
+
+  .lens-five {
+    left: 40.5%;
+    top: 20.9%;
+    transform: translate(-50%, -50%);
+  }
+
+  .camera-flash {
     position: absolute;
-    right: 5px;
-    width: 7px;
-    height: 7px;
+    left: 40.5%;
+    top: 15.4%;
+    width: clamp(6px, calc(var(--phone-w) * .043), 13px);
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(120, 125, 108, .65);
     border-radius: 50%;
-  }
-
-  .flash {
-    top: 65px;
-    border: 1px solid rgba(100,107,89,.5);
-    background: radial-gradient(circle, #fff9e7 0 40%, #e4d7a8 72%, #8d9387 100%);
-    box-shadow: 0 0 6px rgba(255,245,211,.6);
-  }
-
-  .sensor {
-    top: 105px;
-    background: radial-gradient(circle at 30% 25%, #7b8b87, #25322f 70%);
-    box-shadow: 0 0 0 1px rgba(240,245,240,.34);
-  }
-
-  .focus-sensor {
-    top: 125px;
-    width: 5px;
-    height: 5px;
-    background: #35413d;
-    box-shadow: 0 0 0 1px rgba(255,255,255,.24);
-  }
-
-  .back-brand {
-    position: absolute;
-    right: 0;
-    bottom: clamp(34px, calc(var(--phone-w) * .14), 54px);
-    left: 0;
-    display: grid;
-    justify-items: center;
-    gap: 5px;
-    color: rgba(40, 55, 46, .42);
-    text-align: center;
-  }
-
-  .brand-name {
-    font-size: clamp(8px, calc(var(--phone-w) * .031), 10px);
-    font-weight: 800;
-    letter-spacing: .27em;
-  }
-
-  .brand-caption {
-    font-size: clamp(5px, calc(var(--phone-w) * .018), 6px);
-    font-weight: 700;
-    letter-spacing: .19em;
-  }
-
-  .back-seam {
-    position: absolute;
-    right: 18%;
-    bottom: 19px;
-    left: 18%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+    background:
+      radial-gradient(circle,
+        #fffdf0 0 34%,
+        #f6edc8 48%,
+        #c9c9b2 70%,
+        #788179 100%);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, .68),
+      0 1px 3px rgba(28, 35, 29, .34),
+      0 0 5px rgba(255, 245, 211, .42);
   }
 
   /* ---------------------------
@@ -355,22 +370,26 @@
   --------------------------- */
 
   .edge {
+    position: absolute;
     top: 50%;
     left: 50%;
     z-index: 1;
-    border: 1px solid rgba(61, 72, 65, .7);
-    background:
-      linear-gradient(90deg,
-        #65716a 0%,
-        #e5ebe6 12%,
-        #bfc9c2 27%,
-        #828e86 49%,
-        #e2e8e3 73%,
-        #707b74 100%);
+    overflow: visible;
+    border: 1px solid rgba(48, 59, 51, .72);
+    background-clip: padding-box;
     box-shadow:
-      inset 0 1px 1px rgba(255,255,255,.76),
-      inset 0 -1px 1px rgba(24,36,29,.35);
+      inset 0 1px 1px rgba(255,255,255,.62),
+      inset 0 -1px 1px rgba(23,34,27,.42),
+      0 0 0 .35px rgba(255,255,255,.12);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
   }
+
+  /*
+    The side rails use a layered satin-titanium finish:
+    a dark outer arris, a broad brushed center, and a narrow
+    polished highlight toward the front glass edge.
+  */
 
   .edge-left,
   .edge-right {
@@ -379,28 +398,84 @@
     height: calc(100% - var(--corner) - var(--corner) + .4px);
     margin-left: calc(var(--d) / -2);
     border-radius: 2px;
+    background-size: 100% 100%, 100% 100%;
   }
 
   .edge-left {
     transform: rotateY(-90deg) translateZ(calc(var(--phone-w) / 2));
-    background:
+    background-image:
+      repeating-linear-gradient(90deg,
+        rgba(255,255,255,.035) 0 .45px,
+        rgba(28,38,31,.025) .45px 1px,
+        transparent 1px 2.8px),
       linear-gradient(90deg,
-        #58645d 0%,
-        #e3e9e4 16%,
-        #acb7b0 43%,
-        #d4dcd6 76%,
-        #59665e 100%);
+        #424d45 0%,
+        #78847b 7%,
+        #dce3dd 17%,
+        #b5c0b8 31%,
+        #849188 52%,
+        #d4dcd5 73%,
+        #77847b 91%,
+        #465148 100%);
   }
 
   .edge-right {
     transform: rotateY(90deg) translateZ(calc(var(--phone-w) / 2));
-    background:
+    background-image:
+      repeating-linear-gradient(90deg,
+        rgba(255,255,255,.04) 0 .45px,
+        rgba(28,38,31,.025) .45px 1px,
+        transparent 1px 2.8px),
       linear-gradient(90deg,
-        #657169 0%,
-        #dce4dd 18%,
-        #9da9a1 48%,
-        #e7ece8 79%,
-        #5c6860 100%);
+        #3f4942 0%,
+        #6e7a71 8%,
+        #d6ded7 18%,
+        #aab6ad 34%,
+        #7e8b82 54%,
+        #dce4dd 76%,
+        #748077 91%,
+        #414c44 100%);
+  }
+
+  /*
+    A moving, low-contrast highlight is driven by Hero's --sheen
+    value. It gives the narrow side faces a changing light catch
+    during rotation without adding a second animation system.
+  */
+
+  .edge-left::before,
+  .edge-right::before {
+    position: absolute;
+    inset: 0;
+    content: '';
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255,255,255,.035) 20%,
+      rgba(255,255,255,.13) calc(var(--sheen, 50%) - 13%),
+      rgba(255,255,255,.48) var(--sheen, 50%),
+      rgba(255,255,255,.12) calc(var(--sheen, 50%) + 12%),
+      transparent 100%);
+    mix-blend-mode: screen;
+    opacity: .72;
+  }
+
+  /* Fine front/rear arris lines make the rail read as a machined slab. */
+
+  .edge-left::after,
+  .edge-right::after {
+    position: absolute;
+    inset: 1px 0;
+    content: '';
+    pointer-events: none;
+    background: linear-gradient(90deg,
+      rgba(20,29,23,.52) 0 1px,
+      rgba(255,255,255,.34) 1px 1.7px,
+      transparent 1.7px calc(100% - 1.7px),
+      rgba(255,255,255,.42) calc(100% - 1.7px) calc(100% - 1px),
+      rgba(20,29,23,.44) calc(100% - 1px) 100%);
+    opacity: .78;
   }
 
   .edge-top,
@@ -414,15 +489,59 @@
 
   .edge-top {
     transform: rotateX(90deg) translateZ(calc(var(--phone-height) / 2));
+    background:
+      repeating-linear-gradient(0deg,
+        rgba(255,255,255,.045) 0 .45px,
+        transparent .45px 2.8px),
+      linear-gradient(180deg,
+        #465148 0%,
+        #dbe2dc 16%,
+        #aeb9b1 42%,
+        #e1e7e2 73%,
+        #59655d 100%);
   }
 
   .edge-bottom {
     transform: rotateX(-90deg) translateZ(calc(var(--phone-height) / 2));
     background:
+      repeating-linear-gradient(0deg,
+        rgba(255,255,255,.04) 0 .45px,
+        transparent .45px 2.8px),
       linear-gradient(180deg,
-        #e5ebe6 0%,
-        #a2ada5 35%,
-        #5c6860 100%);
+        #4b564e 0%,
+        #dce4dd 18%,
+        #9eaaa1 48%,
+        #d8e0d9 82%,
+        #4b564e 100%);
+  }
+
+  .edge-top::before,
+  .edge-bottom::before {
+    position: absolute;
+    inset: 0;
+    content: '';
+    pointer-events: none;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      rgba(255,255,255,.08) 22%,
+      rgba(255,255,255,.35) 50%,
+      rgba(255,255,255,.06) 78%,
+      transparent 100%);
+    opacity: .7;
+  }
+
+  .edge-top::after,
+  .edge-bottom::after {
+    position: absolute;
+    inset: 0 1px;
+    content: '';
+    pointer-events: none;
+    background: linear-gradient(180deg,
+      rgba(20,29,23,.48) 0 1px,
+      rgba(255,255,255,.34) 1px 1.6px,
+      transparent 1.6px calc(100% - 1.6px),
+      rgba(255,255,255,.36) calc(100% - 1.6px) calc(100% - 1px),
+      rgba(20,29,23,.42) calc(100% - 1px) 100%);
   }
 
   /*
@@ -430,6 +549,7 @@
     Six facets per corner approximate the rounded chassis while keeping
     the perimeter continuous and avoiding gaps at the rail junctions.
   */
+
   .corner-arc {
     position: absolute;
     z-index: 2;
@@ -468,51 +588,129 @@
       rotateX(90deg);
   }
 
-  /* Physical side keys sit slightly proud of the right rail. */
+  /* ---------------------------
+     Side buttons and antenna bands
+  --------------------------- */
+
+  /*
+    The button housing is a recessed dark well. Its inset cap is a
+    separate polished surface, so the controls look machined into
+    the frame rather than painted onto the side.
+  */
 
   .side-button {
     position: absolute;
     left: 50%;
     display: block;
-    width: clamp(5px, calc(var(--d) * .38), 7px);
-    transform: translateX(-50%) translateZ(1px);
-    border: 1px solid rgba(60,70,63,.72);
+    width: clamp(8px, calc(var(--d) * .48), 10px);
+    box-sizing: border-box;
+    transform: translateX(-50%) translateZ(1.05px);
+    border: 1px solid rgba(31, 41, 34, .88);
     border-radius: 4px;
-    background:
-      linear-gradient(90deg,
-        #737f77,
-        #f0f3ef 42%,
-        #c0c9c2 70%,
-        #68746c);
+    background: linear-gradient(90deg,
+      #252f29 0%,
+      #5a665d 22%,
+      #303b34 54%,
+      #202a24 100%);
     box-shadow:
-      0 0 2px rgba(0,0,0,.45),
-      inset 0 0 1px rgba(255,255,255,.85);
+      inset 0 1px 2px rgba(0,0,0,.78),
+      inset 0 -1px 1px rgba(255,255,255,.17),
+      0 0 0 .5px rgba(255,255,255,.2);
   }
 
-  .volume-up { top: 18%; height: 34px; }
-  .volume-down { top: 26%; height: 34px; }
-  .power { top: 41%; height: 47px; }
+  .side-button::before {
+    position: absolute;
+    inset: 1px;
+    content: '';
+    border: 1px solid rgba(255,255,255,.5);
+    border-radius: 2.5px;
+    background: linear-gradient(90deg,
+      #87938a 0%,
+      #f1f4ef 28%,
+      #c5cec7 55%,
+      #718077 100%);
+    box-shadow:
+      inset 0 1px 1px rgba(255,255,255,.8),
+      inset 0 -1px 1px rgba(48,60,51,.35),
+      0 0 .6px rgba(255,255,255,.65);
+    transform: translateZ(.45px);
+  }
+
+  .volume-rocker {
+    top: 19%;
+    height: clamp(34px, calc(var(--phone-height) * .105), 62px);
+    border-radius: 5px;
+  }
+
+  .volume-rocker::before {
+    border-radius: 3.5px;
+  }
+
+  .rocker-seam {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    right: 1px;
+    left: 1px;
+    height: 1px;
+    transform: translateZ(.8px);
+    background: rgba(43, 54, 46, .78);
+    box-shadow: 0 1px 0 rgba(255,255,255,.62);
+    pointer-events: none;
+  }
+
+  .power-button {
+    top: 36%;
+    height: clamp(25px, calc(var(--phone-height) * .073), 42px);
+    border-radius: 4px;
+  }
+
+  .power-button::before {
+    border-radius: 2.5px;
+  }
+
+  /*
+    Antenna breaks are narrow, dark channels with a bright upper
+    arris. Their width crosses the whole rail so the metal appears
+    interrupted rather than carrying a floating painted line.
+  */
 
   .antenna {
     position: absolute;
-    z-index: 2;
+    z-index: 3;
     display: block;
-    background: rgba(42, 54, 47, .58);
-    box-shadow: 0 1px 0 rgba(255,255,255,.52);
+    border: 0;
+    border-radius: 2px;
+    pointer-events: none;
+    background: linear-gradient(180deg,
+      rgba(255,255,255,.8) 0%,
+      #758178 20%,
+      #354139 49%,
+      #465249 72%,
+      rgba(255,255,255,.58) 100%);
+    box-shadow:
+      0 0 0 .5px rgba(27,37,30,.48),
+      0 1px 0 rgba(255,255,255,.48);
   }
 
   .edge-left .antenna,
   .edge-right .antenna {
     left: -1px;
     width: calc(100% + 2px);
-    height: 1px;
+    height: 2.6px;
   }
 
   .edge-top .antenna,
   .edge-bottom .antenna {
     top: -1px;
-    width: 1px;
+    width: 2.6px;
     height: calc(100% + 2px);
+    background: linear-gradient(90deg,
+      rgba(255,255,255,.78) 0%,
+      #758178 20%,
+      #354139 49%,
+      #465249 72%,
+      rgba(255,255,255,.58) 100%);
   }
 
   .antenna-top { top: 12%; }
@@ -520,19 +718,7 @@
   .antenna-left { left: 13%; }
   .antenna-right { right: 13%; }
 
-  .sim-outline {
-    position: absolute;
-    top: 57%;
-    left: 50%;
-    width: 2px;
-    height: 33px;
-    transform: translateX(-50%) translateZ(.8px);
-    border-radius: 2px;
-    background: rgba(50,62,54,.52);
-    box-shadow: 0 0 0 1px rgba(255,255,255,.2);
-  }
-
-  /* Top rail: two small microphone apertures. */
+  /* Top rail microphones */
 
   .top-mic {
     position: absolute;
@@ -548,7 +734,7 @@
   .mic-one { left: 38%; }
   .mic-two { left: 62%; }
 
-  /* Bottom rail: USB-C recess, speaker outlets and microphone. */
+  /* Bottom rail: USB-C, speakers, and microphone. */
 
   .usb-port {
     position: absolute;

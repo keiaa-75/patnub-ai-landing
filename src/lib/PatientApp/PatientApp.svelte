@@ -3,12 +3,14 @@
   import AppHeader from './AppHeader.svelte';
   import BottomNavigation from './BottomNavigation.svelte';
   import AssistantScreen from './screens/AssistantScreen.svelte';
+  import Chat from './screens/Chat.svelte';
   import RecordsScreen from './screens/RecordsScreen.svelte';
   import ScanScreen from './screens/ScanScreen.svelte';
   import MedicinesScreen from './screens/MedicinesScreen.svelte';
 
   let { screen = 0 } = $props();
-  const activeNavigation = (value) => value === 0 ? 'assistant' : value === 1 ? 'records' : value === 3 ? 'medicines' : '';
+  // 0 assistant, 1 chat, 2 records, 3 scan, 4 medicines. Scan has no active tab.
+  const activeNavigation = (value) => value === 0 || value === 1 ? 'assistant' : value === 2 ? 'records' : value === 4 ? 'medicines' : '';
 </script>
 
 <div class="patient-app" data-screen={screen}>
@@ -18,8 +20,10 @@
   {#if screen === 0}
     <AssistantScreen />
   {:else if screen === 1}
-    <RecordsScreen />
+    <Chat />
   {:else if screen === 2}
+    <RecordsScreen />
+  {:else if screen === 3}
     <ScanScreen />
   {:else}
     <MedicinesScreen />

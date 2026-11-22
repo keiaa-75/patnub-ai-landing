@@ -61,7 +61,7 @@
   <div class="face back">
     <div class="back-brush" aria-hidden="true"></div>
 
-    <!-- Individual raised camera rings; no shared camera island. -->
+    <!-- Individual raised camera rings; the reference has no shared camera island. -->
     <div class="camera-array" aria-hidden="true">
       <span class="camera-module main-lens lens-one">
         <span class="camera-glass"></span>
@@ -82,7 +82,7 @@
     </div>
   </div>
 
-  <!-- Left and right side rails. -->
+  <!-- Left and right side rails. These sit between the two glass faces. -->
   <div class="edge edge-left" aria-hidden="true">
     <span class="antenna antenna-top"></span>
     <span class="antenna antenna-bottom"></span>
@@ -97,7 +97,7 @@
     <span class="antenna antenna-bottom"></span>
   </div>
 
-  <!-- Top and bottom rails. -->
+  <!-- Top and bottom rails complete the metal perimeter. -->
   <div class="edge edge-top" aria-hidden="true">
     <span class="antenna antenna-left"></span>
     <span class="antenna antenna-right"></span>
@@ -158,7 +158,8 @@
 
     /*
       Do not put filter, opacity, isolation, or overflow here.
-      Those grouping properties can flatten the 3D descendants.
+      Those grouping properties can flatten the 3D descendants
+      and make the back and side rails disappear.
     */
   }
 
@@ -186,44 +187,113 @@
   --------------------------- */
 
   .back {
+    position: absolute;
     transform: rotateY(180deg) translateZ(calc(var(--d) / 2));
-    border: 1px solid rgba(64, 75, 68, 0.72);
+    border: 1px solid rgba(66, 69, 63, .72);
     background:
-      linear-gradient(118deg,
-        rgba(255,255,255,.56) 0%,
-        rgba(255,255,255,.12) 21%,
-        transparent 43% 69%,
-        rgba(38,52,44,.14) 100%),
-      linear-gradient(145deg,
-        #e0e6e1 0%,
-        #c0c9c3 28%,
-        #aab5ae 57%,
-        #d5dcd7 100%);
+      linear-gradient(112deg,
+        rgba(255,255,255,.34) 0%,
+        rgba(255,255,255,.10) 25%,
+        transparent 50% 72%,
+        rgba(44,48,42,.12) 100%),
+      linear-gradient(157deg,
+        #d8d7d0 0%,
+        #c9c8c0 26%,
+        #bdbcb4 57%,
+        #cecdc5 82%,
+        #d9d8d1 100%);
     box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,.72),
-      inset 0 2px 4px rgba(255,255,255,.5),
-      inset 0 -2px 5px rgba(35,47,40,.2);
+      inset 0 0 0 1px rgba(255,255,255,.76),
+      inset 0 1px 2px rgba(255,255,255,.74),
+      inset 0 -2px 5px rgba(40,43,37,.16),
+      inset 5px 0 12px rgba(255,255,255,.10),
+      inset -5px 0 14px rgba(35,40,34,.09);
+  }
+
+  /*
+    The rear finish is a matte glass surface over a softly shaded
+    metal-backed panel. The reflection position is driven by Hero's
+    --sheen variable, which follows the phone's current yaw.
+  */
+  .back::before,
+  .back::after {
+    position: absolute;
+    inset: 0;
+    content: '';
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* Broad studio reflections and subtle edge falloff. */
+  .back::before {
+    background:
+      radial-gradient(
+        ellipse 43% 26% at var(--sheen, 50%) 13%,
+        rgba(255,255,255,.38) 0%,
+        rgba(255,255,255,.15) 36%,
+        transparent 76%
+      ),
+      radial-gradient(
+        ellipse 58% 36% at calc(100% - var(--sheen, 50%)) 88%,
+        rgba(255,255,255,.17) 0%,
+        rgba(255,255,255,.055) 43%,
+        transparent 76%
+      ),
+      linear-gradient(90deg,
+        rgba(48,53,46,.10) 0%,
+        transparent 7%,
+        transparent 92%,
+        rgba(39,44,38,.13) 100%);
+    mix-blend-mode: screen;
+    opacity: .88;
+  }
+
+  /* Narrower, soft specular glimmer that slides with device rotation. */
+  .back::after {
+    top: -15%;
+    bottom: -15%;
+    inset-inline: auto;
+    left: var(--sheen, 50%);
+    width: 58%;
+    transform: translateX(-50%) rotate(13deg);
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255,255,255,.025) 19%,
+      rgba(255,255,255,.10) 36%,
+      rgba(255,255,255,.27) 49%,
+      rgba(255,255,255,.12) 61%,
+      rgba(255,255,255,.025) 79%,
+      transparent 100%);
+    filter: blur(11px);
+    mix-blend-mode: screen;
+    opacity: .76;
   }
 
   .back-brush {
     position: absolute;
     inset: 0;
+    z-index: 0;
     pointer-events: none;
-    opacity: .24;
+    opacity: .14;
     background:
       repeating-linear-gradient(
-        92deg,
-        rgba(255,255,255,.1) 0 1px,
-        rgba(40,52,45,.035) 1px 2px,
-        transparent 2px 5px
+        91deg,
+        rgba(255,255,255,.095) 0 .45px,
+        rgba(52,55,49,.035) .45px .9px,
+        transparent .9px 3.6px
+      ),
+      repeating-linear-gradient(
+        0deg,
+        rgba(255,255,255,.018) 0 1px,
+        transparent 1px 4px
       );
   }
 
   /*
-    Individual camera rings sit directly on the rear panel.
-    There is no shared raised camera island.
+    The reference device uses individually seated camera rings rather
+    than a shared raised island. Positions are relative to the full
+    rear panel so the gaps between modules remain visible.
   */
-
   .camera-array {
     position: absolute;
     inset: 0;
@@ -311,7 +381,6 @@
   }
 
   /* Three larger lenses form the left column. */
-
   .lens-one {
     left: 18.8%;
     top: 9.8%;
@@ -331,7 +400,6 @@
   }
 
   /* Two smaller camera modules form the right column. */
-
   .lens-four {
     left: 40.5%;
     top: 9.8%;
@@ -390,7 +458,6 @@
     a dark outer arris, a broad brushed center, and a narrow
     polished highlight toward the front glass edge.
   */
-
   .edge-left,
   .edge-right {
     top: calc(var(--corner) - .2px);
@@ -442,7 +509,6 @@
     value. It gives the narrow side faces a changing light catch
     during rotation without adding a second animation system.
   */
-
   .edge-left::before,
   .edge-right::before {
     position: absolute;
@@ -462,7 +528,6 @@
   }
 
   /* Fine front/rear arris lines make the rail read as a machined slab. */
-
   .edge-left::after,
   .edge-right::after {
     position: absolute;
@@ -549,7 +614,6 @@
     Six facets per corner approximate the rounded chassis while keeping
     the perimeter continuous and avoiding gaps at the rail junctions.
   */
-
   .corner-arc {
     position: absolute;
     z-index: 2;
@@ -597,7 +661,6 @@
     separate polished surface, so the controls look machined into
     the frame rather than painted onto the side.
   */
-
   .side-button {
     position: absolute;
     left: 50%;
@@ -674,7 +737,6 @@
     arris. Their width crosses the whole rail so the metal appears
     interrupted rather than carrying a floating painted line.
   */
-
   .antenna {
     position: absolute;
     z-index: 3;
@@ -718,7 +780,7 @@
   .antenna-left { left: 13%; }
   .antenna-right { right: 13%; }
 
-  /* Top rail microphones */
+  /* Top rail: two small microphone apertures. */
 
   .top-mic {
     position: absolute;
@@ -734,7 +796,7 @@
   .mic-one { left: 38%; }
   .mic-two { left: 62%; }
 
-  /* Bottom rail: USB-C, speakers, and microphone. */
+  /* Bottom rail: USB-C recess, speaker outlets and microphone. */
 
   .usb-port {
     position: absolute;
